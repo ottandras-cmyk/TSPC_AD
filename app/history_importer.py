@@ -5,12 +5,24 @@ import uuid
 from datetime import datetime, timezone
 import models
 
-def parse_ps_date(date_str: str):
-    if not date_str or date_str in ["Nincs adat", ""]:
+def parse_ad_datetime(val):
+    if not val:
         return None
-    for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y%m%d_%H%M%S"):
+    if isinstance(val, datetime):
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    s = str(val).strip()
+    if not s or s in ["Nincs adat", "None", "NULL"]:
+        return None
+    m = re.match(r'^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})', s)
+    if m:
         try:
-            return datetime.strptime(date_str.strip(), fmt).replace(tzinfo=timezone.utc)
+            p = [int(x) for x in m.groups()]
+            return datetime(p[0], p[1], p[2], p[3], p[4], p[5], tzinfo=timezone.utc)
+        except Exception:
+            pass
+    for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y%m%d_%H%M%S", "%Y%m%d-%H%M%S"):
+        try:
+            return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
         except Exception:
             continue
     return None
@@ -40,16 +52,16 @@ def scan_csv_directory(folder_path: str) -> dict:
         return {"status": "ERROR", "message": f"A megadott mappa nem létezik: {folder_path}"}
 
     snapshots = {}
-    time_regex = re.compile(r"(\d{8}_\d{6})")
+    time_regex = re.compile(r"(\d{8}[-_]\d{6})")
 
     for fname in os.listdir(folder_path):
         if not fname.lower().endswith(".csv"): continue
         match = time_regex.search(fname)
         if not match: continue
 
-        ts_str = match.group(1)
+        ts_str = match.group(1).replace("-", "_")
         if ts_str not in snapshots:
-            dt = parse_ps_date(ts_str)
+            dt = parse_ad_datetime(ts_str)
             snapshots[ts_str] = {
                 "timestamp_str": ts_str,
                 "datetime": dt.strftime("%Y-%m-%d %H:%M:%S") if dt else ts_str,
@@ -88,22 +100,29 @@ def scan_csv_directory(folder_path: str) -> dict:
         "_raw_data": sorted_snapshots
     }
 
+KNOWN_STATUS_WORDS = {
+    "alapadat", "aktív normál user", "aktiv normal user",
+    "hosszútávúszabadság", "hosszutavuszabadsag",
+    "külsös", "kulsos", "távozottak", "tavozottak",
+    "engedélyezve", "letiltva", "enabled", "disabled"
+}
+
 def parse_snapshot_state(snapshot_item: dict) -> dict:
     users = {}
     groups = {}
 
-    # Groups_*.csv
+    # Groups_*.csv -> Név, Típus, Létrehozás ideje, Leírás
     for gf in snapshot_item["group_files"]:
         rows = read_csv_lines_safe(gf)
         if len(rows) <= 1: continue
         for row in rows[1:]:
             if not row or len(row) < 2: continue
             g_name = row[0].strip()
-            if not g_name: continue
+            if not g_name or g_name.lower() in KNOWN_STATUS_WORDS: continue
             groups[g_name.lower()] = {
                 "name": g_name,
                 "type": row[1].strip() if len(row) > 1 else "Security Group",
-                "created": parse_ps_date(row[2]) if len(row) > 2 else None,
+                "created": parse_ad_datetime(row[2]) if len(row) > 2 else None,
                 "description": row[3].strip() if len(row) > 3 else ""
             }
 
@@ -136,13 +155,28 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
             email = row[2].strip() if len(row) > 2 else ""
             phone = row[3].strip() if len(row) > 3 else ""
             sid = row[4].strip() if len(row) > 4 else ""
-            c_date = parse_ps_date(row[5]) if len(row) > 5 else None
-            last_logon = parse_ps_date(row[6]) if len(row) > 6 else None
+            c_date = parse_ad_datetime(row[5]) if len(row) > 5 else None
+            last_logon = parse_ad_datetime(row[6]) if len(row) > 6 else None
             enabled_str = row[7].strip() if len(row) > 7 else "Engedélyezve"
             is_enabled = (enabled_str.lower() != "letiltva")
-            grp_type = row[8].strip() if len(row) > 8 else ""
-            grp_name = row[9].strip() if len(row) > 9 else ""
-            user_status = row[10].strip() if len(row) > 10 else "Aktív normál user"
+
+            if len(row) >= 11:
+                grp_type = row[8].strip()
+                grp_name = row[9].strip()
+                user_status = row[10].strip()
+            elif len(row) == 10:
+                grp_type = ""
+                grp_name = row[8].strip()
+                user_status = row[9].strip()
+            else:
+                grp_type = ""
+                grp_name = ""
+                user_status = "Aktív normál user"
+
+            if grp_name.lower() in KNOWN_STATUS_WORDS:
+                if user_status == "Aktív normál user" or not user_status:
+                    user_status = grp_name
+                grp_name = ""
 
             extra = alluser_map.get(sam_key, {})
             ou_val = extra.get("ou", "")
@@ -164,6 +198,8 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
                     "groups": set()
                 }
             else:
+                if c_date and not users[sam_key]["created"]:
+                    users[sam_key]["created"] = c_date
                 if last_logon and not users[sam_key]["last_logon"]:
                     users[sam_key]["last_logon"] = last_logon
                 if user_status != "AlapAdat":
@@ -171,7 +207,7 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
                 if ou_val and not users[sam_key]["ou_path"]:
                     users[sam_key]["ou_path"] = ou_val
 
-            if grp_name:
+            if grp_name and grp_name.lower() not in KNOWN_STATUS_WORDS:
                 users[sam_key]["groups"].add(grp_name)
                 if grp_name.lower() not in groups:
                     groups[grp_name.lower()] = {
@@ -184,66 +220,80 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
     return {"users": users, "groups": groups, "timestamp": snapshot_item["dt_obj"]}
 
 def fast_backfill_extra_data(db, folder_path: str) -> dict:
-    """Gyorsan beolvassa a CSV-kből a LastLogonDate, UserStatus és OU mezőket és frissíti a meglévő felhasználókat"""
+    """Gyorsan beolvassa a CSV-kből a CreationDate, Description, LastLogon, Status, OU mezőket és frissíti a meglévő rekordokat"""
     scan_res = scan_csv_directory(folder_path)
-    if scan_res.get("status") == "ERROR":
-        return scan_res
+    if scan_res.get("status") == "ERROR": return scan_res
 
     snapshots = scan_res.get("_raw_data", [])
-    if not snapshots:
-        return {"status": "ERROR", "message": "Nincs CSV fájl a mappában."}
+    if not snapshots: return {"status": "ERROR", "message": "Nincs CSV fájl a mappában."}
 
     user_extras = {}
-    # Legújabbaktól visszafelé haladva gyűjtjük ki a legfrissebb állapotokat
-    for snap in reversed(snapshots):
+    group_extras = {}
+
+    for snap in snapshots:
         state = parse_snapshot_state(snap)
         for sam_key, u in state["users"].items():
             if sam_key not in user_extras:
                 user_extras[sam_key] = {
+                    "created": u.get("created"),
                     "last_logon": u.get("last_logon"),
                     "status": u.get("status"),
                     "ou_path": u.get("ou_path")
                 }
             else:
-                if not user_extras[sam_key]["last_logon"] and u.get("last_logon"):
+                if not user_extras[sam_key]["created"] and u.get("created"):
+                    user_extras[sam_key]["created"] = u.get("created")
+                if u.get("last_logon"):
                     user_extras[sam_key]["last_logon"] = u.get("last_logon")
-                if user_extras[sam_key]["status"] == "AlapAdat" and u.get("status") != "AlapAdat":
+                if u.get("status") != "AlapAdat":
                     user_extras[sam_key]["status"] = u.get("status")
-                if not user_extras[sam_key]["ou_path"] and u.get("ou_path"):
+                if u.get("ou_path"):
                     user_extras[sam_key]["ou_path"] = u.get("ou_path")
 
-    db_users = db.query(models.ADUser).all()
-    updated_count = 0
+        for g_key, g in state["groups"].items():
+            if g_key not in group_extras:
+                group_extras[g_key] = {
+                    "created": g.get("created"),
+                    "description": g.get("description"),
+                    "type": g.get("type")
+                }
+            else:
+                if not group_extras[g_key]["created"] and g.get("created"):
+                    group_extras[g_key]["created"] = g.get("created")
+                if g.get("description"):
+                    group_extras[g_key]["description"] = g.get("description")
+                if g.get("type"):
+                    group_extras[g_key]["type"] = g.get("type")
 
+    # 1. Felhasználók frissítése
+    db_users = db.query(models.ADUser).all()
+    updated_users = 0
     for db_u in db_users:
         sam_k = db_u.sam_account_name.lower()
         extra = user_extras.get(sam_k)
         if extra:
-            modified = False
-            if extra.get("last_logon") and db_u.last_logon_date != extra["last_logon"]:
-                db_u.last_logon_date = extra["last_logon"]
-                modified = True
-            if extra.get("status") and extra["status"] != "AlapAdat" and db_u.user_status != extra["status"]:
-                db_u.user_status = extra["status"]
-                modified = True
-            elif not db_u.user_status:
-                db_u.user_status = "Aktív normál user" if db_u.is_enabled else "Letiltva"
-                modified = True
+            if extra.get("created"): db_u.when_created = extra["created"]
+            if extra.get("last_logon"): db_u.last_logon_date = extra["last_logon"]
+            if extra.get("status") and extra["status"] != "AlapAdat": db_u.user_status = extra["status"]
+            if extra.get("ou_path"): db_u.ou_path = extra["ou_path"]
+            updated_users += 1
 
-            if extra.get("ou_path") and db_u.ou_path != extra["ou_path"]:
-                db_u.ou_path = extra["ou_path"]
-                modified = True
-            elif not db_u.ou_path and db_u.distinguished_name:
-                db_u.ou_path = extract_ou_path(db_u.distinguished_name)
-                modified = True
-
-            if modified:
-                updated_count += 1
+    # 2. Csoportok frissítése
+    db_groups = db.query(models.ADGroup).all()
+    updated_groups = 0
+    for db_g in db_groups:
+        g_k = db_g.sam_account_name.lower()
+        g_extra = group_extras.get(g_k)
+        if g_extra:
+            if g_extra.get("created"): db_g.when_created = g_extra["created"]
+            if g_extra.get("description"): db_g.description = g_extra["description"]
+            if g_extra.get("type"): db_g.group_type = g_extra["type"]
+            updated_groups += 1
 
     db.commit()
     return {
         "status": "SUCCESS",
-        "message": f"Sikeres frissítés! {updated_count} felhasználó rekordja frissült a CSV extra adatokkal (Utolsó belépés, Besorolás, OU)."
+        "message": f"Sikeres frissítés! {updated_users} db felhasználó (Valós létrehozási idő, utolsó belépés, OU) és {updated_groups} db csoport (Létrehozási idő, leírás) frissítve az adatbázisban!"
     }
 
 def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
@@ -289,13 +339,16 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                 db_groups_cache[g_key] = new_grp
                 if idx > 0:
                     db.add(models.ADAuditLog(
-                        timestamp=ts,
-                        entity_type="GROUP",
-                        entity_name=g_info["name"],
-                        change_type="GROUP_CREATED",
-                        details=f"Új AD csoport detektálva ({g_info['type']})"
+                        timestamp=ts, entity_type="GROUP", entity_name=g_info["name"],
+                        change_type="GROUP_CREATED", details=f"Új AD csoport detektálva ({g_info['type']})",
+                        raw_diff=None
                     ))
                     snap_events += 1
+            else:
+                grp_obj = db_groups_cache[g_key]
+                if g_info.get("created"): grp_obj.when_created = g_info["created"]
+                if g_info.get("description"): grp_obj.description = g_info["description"]
+                if g_info.get("type"): grp_obj.group_type = g_info["type"]
 
         # Felhasználók
         for u_key, u_info in curr_users.items():
@@ -328,14 +381,13 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
 
                 if idx > 0:
                     db.add(models.ADAuditLog(
-                        timestamp=ts,
-                        entity_type="USER",
-                        entity_name=u_info["sam"],
-                        change_type="USER_CREATED",
-                        details=f"Új fiók azonosítva ({u_info['name']})"
+                        timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
+                        change_type="USER_CREATED", details=f"Új fiók azonosítva ({u_info['name']})",
+                        raw_diff=None
                     ))
                     snap_events += 1
             else:
+                if u_info.get("created"): db_user.when_created = u_info["created"]
                 db_user.display_name = u_info["name"] or db_user.display_name
                 if u_info["mail"]: db_user.mail = u_info["mail"]
                 if u_info["phone"]: db_user.telephone_number = u_info["phone"]
@@ -354,14 +406,16 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db_user.is_enabled = False
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
-                        change_type="USER_DISABLED", details="Fiók inaktiválva / letiltva"
+                        change_type="USER_DISABLED", details="Fiók inaktiválva / letiltva",
+                        raw_diff=None
                     ))
                     snap_events += 1
                 elif not p_user["enabled"] and u_info["enabled"]:
                     db_user.is_enabled = True
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
-                        change_type="USER_ENABLED", details="Fiók újraaktiválva"
+                        change_type="USER_ENABLED", details="Fiók újraaktiválva",
+                        raw_diff=None
                     ))
                     snap_events += 1
 
@@ -369,7 +423,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
                         change_type="STATUS_CHANGED",
-                        details=f"Besorolás változott: '{p_user['status']}' -> '{u_info['status']}'"
+                        details=f"Besorolás változott: '{p_user['status']}' -> '{u_info['status']}'",
+                        raw_diff=None
                     ))
                     snap_events += 1
 
@@ -380,7 +435,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                         db_user.groups.append(grp_obj)
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="MEMBERSHIP", entity_name=u_info["sam"],
-                        change_type="ADDED_TO_GROUP", details=f"Hozzáadva: '{ag}'"
+                        change_type="ADDED_TO_GROUP", details=f"Hozzáadva: '{ag}'",
+                        raw_diff=None
                     ))
                     snap_events += 1
 
@@ -391,7 +447,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                         db_user.groups.remove(grp_obj)
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="MEMBERSHIP", entity_name=u_info["sam"],
-                        change_type="REMOVED_FROM_GROUP", details=f"Eltávolítva: '{rg}'"
+                        change_type="REMOVED_FROM_GROUP", details=f"Eltávolítva: '{rg}'",
+                        raw_diff=None
                     ))
                     snap_events += 1
             else:
@@ -404,7 +461,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
             db.add(models.ADAuditLog(
                 timestamp=ts, entity_type="SYSTEM", entity_name="IMPORT",
                 change_type="BASELINE_ESTABLISHED",
-                details=f"Alapállapot: {len(curr_users)} fiók és {len(curr_groups)} csoport"
+                details=f"Alapállapot: {len(curr_users)} fiók és {len(curr_groups)} csoport",
+                raw_diff=None
             ))
             snap_events += 1
 

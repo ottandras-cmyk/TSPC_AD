@@ -1,135 +1,167 @@
 import urllib.request
 import urllib.error
 import json
-import base64
+import re
 import os
 
-def gh_req(url, token, method="GET", data=None):
-    req = urllib.request.Request(url, method=method)
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github.v3+json")
-    req.add_header("X-GitHub-Api-Version", "2022-11-28")
-    req.add_header("User-Agent", "AD-Tracker-Sync")
-    if data:
-        req.add_header("Content-Type", "application/json")
-        req.data = json.dumps(data).encode("utf-8")
+def _request(url: str, method: str = "GET", token: str = "", data: dict = None, timeout: int = 15):
+    headers = {
+        "User-Agent": "AD-Tracker",
+        "Accept": "application/vnd.github.v3+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    body = None
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+        body = json.dumps(data).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=20) as response:
-            resp_body = response.read().decode("utf-8")
-            return True, json.loads(resp_body) if resp_body else {}
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            raw = resp.read().decode("utf-8")
+            if "application/json" in content_type or raw.startswith(("{", "[")):
+                return resp.status, json.loads(raw)
+            return resp.status, raw
     except urllib.error.HTTPError as e:
-        raw_body = e.read().decode("utf-8", errors="replace")
+        raw_err = e.read().decode("utf-8", errors="ignore")
         try:
-            parsed = json.loads(raw_body)
-            err_msg = parsed.get("message", raw_body)
+            return e.code, json.loads(raw_err)
         except Exception:
-            err_msg = raw_body
-
-        if e.code == 401:
-            return False, f"401: Hibás vagy lejárt GitHub PAT token! ({err_msg})"
-        elif e.code == 403:
-            return False, f"403: Nincs írási (Push) joga a tokennek! (Contents: Read and write szükséges) ({err_msg})"
-        elif e.code == 404:
-            return False, f"404: A repó vagy az ág nem található, vagy nincs írási hozzáférés! ({err_msg})"
-        elif e.code == 422:
-            return False, f"422: Feldolgozási hiba: {err_msg}"
-        return False, f"HTTP {e.code}: {err_msg}"
+            return e.code, raw_err
     except Exception as e:
-        return False, f"Hálózati hiba: {str(e)}"
+        return 0, str(e)
 
-def test_github_connection(repo, token):
-    ok, res = gh_req(f"https://api.github.com/repos/{repo}", token)
-    if ok:
-        perms = res.get("permissions", {})
-        push_ok = perms.get("push", False)
-        msg = f"Sikeres kapcsolat: {res.get('full_name')}"
-        if not push_ok:
-            msg += "\n⚠️ FIGYELEM: A tokennek CSAK OLVASÁSI joga van! Íráshoz adjon 'repo' vagy 'Contents: Read and write' jogosultságot a GitHubon!"
-        else:
-            msg += "\n✅ Írási jogosultság rendben!"
-        return True, msg
-    return False, res
+def test_github_connection(repo: str, token: str) -> tuple[bool, str]:
+    status, res = _request(f"https://api.github.com/repos/{repo}", "GET", token)
+    if status == 200 and isinstance(res, dict):
+        return True, f"Sikeres kapcsolat! Repó: {res.get('full_name')} (Privát: {res.get('private')})"
+    elif status == 401:
+        return False, "Érvénytelen GitHub Token (Bad credentials)!"
+    elif status == 404:
+        return False, "A megadott repó nem található, vagy a tokennek nincs hozzáférése!"
+    else:
+        msg = res.get("message") if isinstance(res, dict) else str(res)
+        return False, f"GitHub hiba (HTTP {status}): {msg}"
 
-def get_github_commit_history(repo, token, branch):
-    url = f"https://api.github.com/repos/{repo}/commits?sha={branch}&per_page=10"
-    ok, res = gh_req(url, token)
-    if not ok:
-        return False, res
-    history = []
-    for c in res:
-        history.append({
-            "sha": c.get('sha', '')[:7],
-            "message": c.get('commit', {}).get('message', ''),
-            "date": c.get('commit', {}).get('author', {}).get('date', ''),
-            "author": c.get('commit', {}).get('author', {}).get('name', '')
-        })
-    return True, history
+def get_latest_github_version(repo: str, token: str, branch: str = "main") -> str:
+    if not repo or not token:
+        return "1.00"
+    status, res = _request(f"https://api.github.com/repos/{repo}/tags?per_page=5", "GET", token)
+    if status == 200 and isinstance(res, list) and res:
+        first_tag = res[0].get("name", "")
+        m = re.search(r"v?([0-9]+\.[0-9]+)", first_tag)
+        if m:
+            return m.group(1)
+    status, res = _request(f"https://api.github.com/repos/{repo}/commits?sha={branch}&per_page=5", "GET", token)
+    if status == 200 and isinstance(res, list) and res:
+        for c in res:
+            msg = c.get("commit", {}).get("message", "")
+            m = re.search(r"v?([0-9]+\.[0-9]+)", msg)
+            if m:
+                return m.group(1)
+    return "1.00"
 
-def push_code_to_github(repo, branch, token, version_str, custom_msg=""):
-    base_url = f"https://api.github.com/repos/{repo}"
-    print(f"[GitHub Push] Indítás -> Repó: {repo}, Ág: {branch}")
-    
-    # 1. Ág lekérése
-    ok, branch_info = gh_req(f"{base_url}/branches/{branch}", token)
-    if not ok:
-        print(f"[GitHub Push] Hiba az ág lekérésekor: {branch_info}")
-        return False, f"Ág hiba: {branch_info}"
-        
-    latest_sha = branch_info['commit']['sha']
-    base_tree_sha = branch_info['commit']['commit']['tree']['sha']
-    print(f"[GitHub Push] Bázis commit: {latest_sha[:7]}, Bázis fa: {base_tree_sha[:7]}")
+def get_github_commit_history(repo: str, token: str, branch: str = "main") -> tuple[bool, list]:
+    status, res = _request(f"https://api.github.com/repos/{repo}/commits?sha={branch}&per_page=10", "GET", token)
+    if status == 200 and isinstance(res, list):
+        commits = []
+        for item in res:
+            c = item.get("commit", {})
+            commits.append({
+                "sha": item.get("sha", "")[:7],
+                "message": c.get("message", ""),
+                "author": c.get("author", {}).get("name", ""),
+                "date": c.get("author", {}).get("date", "")
+            })
+        return True, commits
+    err = res.get("message") if isinstance(res, dict) else str(res)
+    return False, [f"HTTP {status}: {err}"]
 
-    # 2. Fájlok összeszedése
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    files_to_push = []
-    for fname in os.listdir(current_dir):
-        if fname.endswith(".py"):
-            files_to_push.append((f"app/{fname}", os.path.join(current_dir, fname)))
+def push_code_to_github(repo: str, branch: str, token: str, new_version: str, custom_message: str = "") -> tuple[bool, str]:
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    project_dir = os.path.abspath(os.path.join(app_dir, ".."))
 
-    parent_dir = os.path.dirname(current_dir)
-    for rname in ["Dockerfile", "docker-compose.yml", "requirements.txt", ".gitignore", ".env.example"]:
-        p_path = os.path.join(parent_dir, rname)
-        c_path = os.path.join(current_dir, rname)
-        if os.path.isfile(p_path): files_to_push.append((rname, p_path))
-        elif os.path.isfile(c_path): files_to_push.append((rname, c_path))
+    # Javított endpoint: /git/refs/heads/... (többes számban)
+    ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/{branch}"
+    status, r_ref = _request(ref_url, "GET", token)
+    if status != 200 or not isinstance(r_ref, dict):
+        return False, f"A(z) '{branch}' ág nem található a repóban! (HTTP {status})"
 
-    print(f"[GitHub Push] Összegyűjtve: {len(files_to_push)} db fájl feltöltésre")
+    latest_commit_sha = r_ref["object"]["sha"]
+    commit_url = f"https://api.github.com/repos/{repo}/git/commits/{latest_commit_sha}"
+    status, r_commit = _request(commit_url, "GET", token)
+    if status != 200 or not isinstance(r_commit, dict):
+        return False, f"Nem sikerült lekérni a legutóbbi commitot! (HTTP {status})"
+    base_tree_sha = r_commit["tree"]["sha"]
 
-    # 3. Fájlok küldése blobként
     tree_items = []
-    for repo_path, local_path in files_to_push:
-        try:
-            with open(local_path, "rb") as f:
+    # 1. Python kódok
+    for fname in os.listdir(app_dir):
+        if fname.endswith(".py"):
+            fpath = os.path.join(app_dir, fname)
+            with open(fpath, "r", encoding="utf-8") as f:
                 content = f.read()
-            blob_data = {"content": base64.b64encode(content).decode("utf-8"), "encoding": "base64"}
-            ok, b_res = gh_req(f"{base_url}/git/blobs", token, method="POST", data=blob_data)
-            if not ok:
-                print(f"[GitHub Push] Hiba a blob feltöltésnél ({repo_path}): {b_res}")
-                return False, f"Blob hiba ({repo_path}): {b_res}"
-            tree_items.append({"path": repo_path, "mode": "100644", "type": "blob", "sha": b_res["sha"]})
-        except Exception as e:
-            return False, f"Fájl olvasási hiba ({repo_path}): {str(e)}"
+            tree_items.append({"path": f"app/{fname}", "mode": "100644", "type": "blob", "content": content})
 
-    # 4. Fa létrehozása
-    ok, new_tree = gh_req(f"{base_url}/git/trees", token, method="POST", data={"base_tree": base_tree_sha, "tree": tree_items})
-    if not ok:
-        print(f"[GitHub Push] Hiba a fa létrehozásakor: {new_tree}")
-        return False, f"Tree hiba: {new_tree}"
+    # 2. HTML Sablonok
+    templates_dir = os.path.join(app_dir, "templates")
+    if os.path.isdir(templates_dir):
+        for tname in os.listdir(templates_dir):
+            tpath = os.path.join(templates_dir, tname)
+            if os.path.isfile(tpath):
+                with open(tpath, "r", encoding="utf-8") as f:
+                    content = f.read()
+                tree_items.append({"path": f"app/templates/{tname}", "mode": "100644", "type": "blob", "content": content})
 
-    # 5. Commit létrehozása
-    msg = f"v{version_str} - {custom_msg}" if custom_msg else f"v{version_str} - Automatikus mentés"
-    commit_payload = {"message": msg, "tree": new_tree["sha"], "parents": [latest_sha]}
-    ok, new_commit = gh_req(f"{base_url}/git/commits", token, method="POST", data=commit_payload)
-    if not ok:
-        print(f"[GitHub Push] Hiba a commit létrehozásakor: {new_commit}")
-        return False, f"Commit hiba: {new_commit}"
+    # 3. Konfigurációs fájlok
+    for cname in ["Dockerfile", "docker-compose.yml", "requirements.txt", ".gitignore"]:
+        cpath = os.path.join(project_dir, cname)
+        if os.path.isfile(cpath):
+            with open(cpath, "r", encoding="utf-8") as f:
+                content = f.read()
+            tree_items.append({"path": cname, "mode": "100644", "type": "blob", "content": content})
 
-    # 6. Branch mutató frissítése (PATCH)
-    ref_payload = {"sha": new_commit["sha"], "force": True}
-    ok, ref_update = gh_req(f"{base_url}/git/refs/heads/{branch}", token, method="PATCH", data=ref_payload)
-    if not ok:
-        print(f"[GitHub Push] Hiba az ág frissítésekor: {ref_update}")
-        return False, f"Ág frissítés hiba: {ref_update}"
+    # 4. Generált dokumentáció, sémák és AI promptok
+    for search_docs in [os.path.join(project_dir, "docs"), os.path.join(app_dir, "docs")]:
+        if os.path.isdir(search_docs):
+            for dname in os.listdir(search_docs):
+                dpath = os.path.join(search_docs, dname)
+                if os.path.isfile(dpath):
+                    with open(dpath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    if f"docs/{dname}" not in [x["path"] for x in tree_items]:
+                        tree_items.append({"path": f"docs/{dname}", "mode": "100644", "type": "blob", "content": content})
 
-    print(f"[GitHub Push] SIKER! Új commit: {new_commit['sha'][:7]}")
-    return True, f"Sikeres feltöltés! Új commit: {new_commit['sha'][:7]} (v{version_str})"
+    tree_post_url = f"https://api.github.com/repos/{repo}/git/trees"
+    status, r_tree = _request(tree_post_url, "POST", token, data={"base_tree": base_tree_sha, "tree": tree_items})
+    if status != 201 or not isinstance(r_tree, dict):
+        return False, f"Git tree hiba: {r_tree}"
+    new_tree_sha = r_tree["sha"]
+
+    commit_msg = f"v{new_version}"
+    if custom_message.strip():
+        commit_msg += f" - {custom_message.strip()}"
+    else:
+        commit_msg += " - Teljes rendszer mentés és dokumentáció frissítés"
+
+    commit_post_url = f"https://api.github.com/repos/{repo}/git/commits"
+    commit_payload = {"message": commit_msg, "tree": new_tree_sha, "parents": [latest_commit_sha]}
+    status, r_new_commit = _request(commit_post_url, "POST", token, data=commit_payload)
+    if status != 201 or not isinstance(r_new_commit, dict):
+        return False, f"Git commit hiba: {r_new_commit}"
+    new_commit_sha = r_new_commit["sha"]
+
+    # Ág frissítése a helyes endpointtal (/git/refs/heads/...) és force: True opcióval
+    status, r_update_ref = _request(ref_url, "PATCH", token, data={"sha": new_commit_sha, "force": True})
+    if status != 200:
+        return False, f"Branch frissítési hiba: {r_update_ref}"
+
+    try:
+        tag_ref_url = f"https://api.github.com/repos/{repo}/git/refs"
+        _request(tag_ref_url, "POST", token, data={"ref": f"refs/tags/v{new_version}", "sha": new_commit_sha})
+    except Exception:
+        pass
+
+    return True, f"Sikeres publikáció a GitHubra! Verzió: v{new_version} (Commit: {new_commit_sha[:7]})"

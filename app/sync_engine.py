@@ -1,182 +1,344 @@
+import re
 import uuid
 from datetime import datetime, timezone
-from ldap3 import Server, Connection, NTLM, SIMPLE, SUBTREE
-from ldap3.protocol.formatters.standard import format_sid
 from sqlalchemy.orm import Session
-from ldap_client import parse_ad_server
-from config_manager import get_setting
+from ldap3 import Server, Connection, ALL, SUBTREE
 import models
+from config_manager import get_setting
 
-def get_attr(entry, attr_name, default=""):
-    """Biztonságos attribútum kinyerés az ldap3 entry-ből"""
-    try:
-        val = entry['attributes'].get(attr_name)
-        if val is None or val == []:
-            return default
-        if isinstance(val, list):
-            return str(val[0])
-        return str(val)
-    except:
-        return default
+def parse_ad_datetime(val):
+    """AD GeneralizedTime (pl. 20210415132245.0Z) és egyéb dátumformátumok biztos konvertálása"""
+    if not val:
+        return None
+    if isinstance(val, datetime):
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    s = str(val).strip()
+    if not s or s in ["Nincs adat", "None", "NULL"]:
+        return None
+    # GeneralizedTime regex illesztés (pl. 20180415123000.0Z)
+    m = re.match(r'^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})', s)
+    if m:
+        try:
+            p = [int(x) for x in m.groups()]
+            return datetime(p[0], p[1], p[2], p[3], p[4], p[5], tzinfo=timezone.utc)
+        except Exception:
+            pass
+    for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y%m%d_%H%M%S", "%Y%m%d-%H%M%S"):
+        try:
+            return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+    return None
 
-def get_date_attr(entry, attr_name):
-    """Biztonságos dátum kinyerés az AD GeneralizedTime formátumából"""
+def parse_ad_filetime(val):
+    """Windows FileTime (100-nanoszekundumos intervallum 1601 óta) konvertálása UTC datetime-ra"""
+    if not val:
+        return None
     try:
-        val = entry['attributes'].get(attr_name)
-        if not val:
-            return None
-        # Az AD datetime objektumként vagy stringként is visszaadhatja
-        if isinstance(val, list):
-            val = val[0]
+        if isinstance(val, (list, tuple)):
+            val = val[0] if len(val) > 0 else None
         if isinstance(val, datetime):
-            return val
-        
-        # Ha string (pl. '20230101120000.0Z')
-        val_str = str(val).split('.')[0] # Leveágjuk a törtmásodpercet
-        val_str = val_str.replace('Z', '')
-        if len(val_str) == 14:
-            return datetime.strptime(val_str, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
-        return None
-    except:
+            return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+        val_int = int(str(val).strip())
+        if val_int <= 0 or val_int > 0x7FFFFFFFFFFFFFFF:
+            return None
+        epoch_sec = (val_int / 10000000) - 11644473600
+        if epoch_sec < 0:
+            return None
+        return datetime.fromtimestamp(epoch_sec, tz=timezone.utc)
+    except Exception:
         return None
 
-def run_ad_sync(db: Session):
-    raw_server = get_setting(db, "AD_SERVER")
-    user = get_setting(db, "AD_USER")
-    password = get_setting(db, "AD_PASSWORD")
+def extract_ou_path(dn: str) -> str:
+    if not dn:
+        return ""
+    ou_matches = re.findall(r'OU=([^,]+)', dn, re.IGNORECASE)
+    return ";".join(ou_matches)
+
+def determine_user_status(member_of_list, is_enabled: bool) -> str:
+    for g_dn in (member_of_list or []):
+        g_str = str(g_dn)
+        if re.search(r'CN=Hosszútávúszabadság', g_str, re.IGNORECASE):
+            return "Hosszútávúszabadság"
+        elif re.search(r'CN=Külsös', g_str, re.IGNORECASE):
+            return "Külsös"
+        elif re.search(r'CN=Távozottak', g_str, re.IGNORECASE):
+            return "Távozottak"
+    return "Aktív normál user" if is_enabled else "Letiltva"
+
+def get_attr(entry, name, default=None):
+    try:
+        if hasattr(entry, name):
+            val = getattr(entry, name).value
+            if val is not None:
+                return val
+        if name in entry:
+            val = entry[name].value
+            if val is not None:
+                return val
+        if hasattr(entry, name) and hasattr(getattr(entry, name), 'raw_values'):
+            raw = getattr(entry, name).raw_values
+            if raw and raw[0]:
+                if isinstance(raw[0], bytes):
+                    return raw[0].decode('utf-8', errors='ignore')
+                return str(raw[0])
+    except Exception:
+        pass
+    return default
+
+def get_guid(entry):
+    try:
+        val = entry['objectGUID'].raw_values[0]
+        if isinstance(val, bytes):
+            return uuid.UUID(bytes_le=val)
+    except Exception:
+        pass
+    try:
+        val = entry['objectGUID'].value
+        if isinstance(val, uuid.UUID):
+            return val
+        if isinstance(val, str):
+            return uuid.UUID(val)
+    except Exception:
+        pass
+    return uuid.uuid4()
+
+def run_ad_sync(db: Session) -> dict:
+    server_addr = get_setting(db, "AD_SERVER")
+    bind_user = get_setting(db, "AD_USER")
+    bind_pass = get_setting(db, "AD_PASSWORD")
     search_base = get_setting(db, "AD_SEARCH_BASE")
 
-    if not all([raw_server, user, password, search_base]):
-        raise Exception("Hiányzó AD konfiguráció!")
+    if not all([server_addr, bind_user, bind_pass, search_base]):
+        raise ValueError("Hiányzó Active Directory kapcsolati beállítások!")
 
-    host, port, use_ssl = parse_ad_server(raw_server)
-    
-    # Kifejezetten megmondjuk az ldap3-nak, hogy az összes meglévő attribútumot küldje át!
-    # Ha a get_info=ALL nincs megfelelően beállítva az AD oldalon, explicit kérjük a mezőket.
-    server = Server(host=host, port=port, use_ssl=use_ssl, connect_timeout=10)
-    auth_type = SIMPLE if "@" in user else NTLM
-    conn = Connection(server, user=user, password=password, authentication=auth_type, auto_bind=True)
+    server = Server(server_addr, get_info=ALL)
+    conn = Connection(server, user=bind_user, password=bind_pass, auto_bind=True)
 
-    now = datetime.now(timezone.utc)
+    now_utc = datetime.now(timezone.utc)
     changes_count = 0
 
-    # 1. CSOPORTOK (Kifejezetten kérjük a mezőket!)
-    group_attrs = [
-        'objectGUID', 'sAMAccountName', 'distinguishedName', 'description', 
-        'groupType', 'objectSid', 'whenCreated', 'whenChanged'
-    ]
-    group_paged = conn.extend.standard.paged_search(
-        search_base, "(objectCategory=group)", SUBTREE, 
-        attributes=group_attrs, paged_size=500
-    )
+    # 1. BIZTONSÁGI CSOPORTOK ÉS TERJESZTÉSI LISTÁK SZINKRONIZÁLÁSA
+    group_attrs = ['objectGUID', 'sAMAccountName', 'distinguishedName', 'description', 'groupType', 'objectSid', 'whenCreated', 'whenChanged']
+    conn.search(search_base=search_base, search_filter='(&(objectCategory=group)(objectClass=group))', search_scope=SUBTREE, attributes=group_attrs)
     
-    ad_groups_map = {}
-    for entry in group_paged:
-        raw_guid = entry.get('raw_attributes', {}).get('objectGUID', [None])[0]
-        if not raw_guid: continue
-        g_uuid = uuid.UUID(bytes_le=raw_guid)
-        
-        dn = get_attr(entry, 'distinguishedName')
-        gtype_val = int(get_attr(entry, 'groupType', '0'))
-        is_security = bool(gtype_val & 2147483648)
-        group_type_str = "Biztonsági (Security)" if is_security else "Terjesztési lista (Distribution)"
-        
-        raw_sid = entry.get('raw_attributes', {}).get('objectSid', [None])[0]
-        sid_str = format_sid(raw_sid) if raw_sid else ""
+    db_groups = {g.sam_account_name.lower(): g for g in db.query(models.ADGroup).all()}
+    for entry in conn.entries:
+        sam = str(get_attr(entry, 'sAMAccountName', '')).strip()
+        if not sam: continue
+        sam_key = sam.lower()
 
-        db_group = db.query(models.ADGroup).filter(models.ADGroup.object_guid == g_uuid).first()
-        if not db_group:
-            db_group = models.ADGroup(
-                object_guid=g_uuid, 
-                sam_account_name=get_attr(entry, 'sAMAccountName'),
-                distinguished_name=dn, 
-                description=get_attr(entry, 'description'),
-                group_type=group_type_str,
-                object_sid=sid_str,
-                when_created=get_date_attr(entry, 'whenCreated'),
-                when_changed=get_date_attr(entry, 'whenChanged'),
-                last_synced_at=now
+        raw_type = get_attr(entry, 'groupType')
+        is_security = bool(int(raw_type) & 0x80000000) if raw_type is not None else True
+        grp_type_str = "Biztonsági Csoport" if is_security else "Terjesztési Lista"
+
+        dn = str(get_attr(entry, 'distinguishedName', ''))
+        desc = str(get_attr(entry, 'description') or '').strip()
+        sid = str(get_attr(entry, 'objectSid') or '')
+        w_created = parse_ad_datetime(get_attr(entry, 'whenCreated'))
+        w_changed = parse_ad_datetime(get_attr(entry, 'whenChanged'))
+
+        if sam_key not in db_groups:
+            new_grp = models.ADGroup(
+                object_guid=get_guid(entry),
+                sam_account_name=sam,
+                distinguished_name=dn,
+                description=desc,
+                group_type=grp_type_str,
+                object_sid=sid,
+                when_created=w_created or now_utc,
+                when_changed=w_changed or now_utc,
+                last_synced_at=now_utc
             )
-            db.add(db_group)
-        else:
-            db_group.distinguished_name = dn
-            db_group.description = get_attr(entry, 'description')
-            db_group.group_type = group_type_str
-            db_group.when_changed = get_date_attr(entry, 'whenChanged')
-            db_group.last_synced_at = now
-            
-        ad_groups_map[dn.lower()] = db_group
-    
-    db.commit()
-
-    # 2. FELHASZNÁLÓK (Kifejezetten felsoroljuk az összes kért attribútumot!)
-    user_attrs = [
-        'objectGUID', 'sAMAccountName', 'displayName', 'mail', 'userAccountControl', 
-        'memberOf', 'distinguishedName', 'givenName', 'sn', 'description', 
-        'physicalDeliveryOfficeName', 'title', 'department', 'company', 
-        'telephoneNumber', 'mobile', 'objectSid', 'whenCreated', 'whenChanged'
-    ]
-    user_paged = conn.extend.standard.paged_search(
-        search_base, "(&(objectCategory=person)(objectClass=user))", SUBTREE, 
-        attributes=user_attrs, paged_size=500
-    )
-    
-    for entry in user_paged:
-        raw_guid = entry.get('raw_attributes', {}).get('objectGUID', [None])[0]
-        if not raw_guid: continue
-        u_uuid = uuid.UUID(bytes_le=raw_guid)
-        sam_name = get_attr(entry, 'sAMAccountName')
-        uac = int(get_attr(entry, 'userAccountControl', '512'))
-        is_enabled = not bool(uac & 2)
-        
-        raw_sid = entry.get('raw_attributes', {}).get('objectSid', [None])[0]
-        sid_str = format_sid(raw_sid) if raw_sid else ""
-
-        db_user = db.query(models.ADUser).filter(models.ADUser.object_guid == u_uuid).first()
-        if not db_user:
-            db_user = models.ADUser(object_guid=u_uuid, sam_account_name=sam_name, last_synced_at=now)
-            db.add(db_user)
+            db.add(new_grp)
             db.flush()
+            db_groups[sam_key] = new_grp
+            changes_count += 1
+        else:
+            g = db_groups[sam_key]
+            g.distinguished_name = dn
+            if desc: g.description = desc
+            g.group_type = grp_type_str
+            if w_created: g.when_created = w_created
+            if w_changed: g.when_changed = w_changed
+            g.last_synced_at = now_utc
 
-        db_user.display_name = get_attr(entry, 'displayName', sam_name)
-        db_user.mail = get_attr(entry, 'mail')
-        db_user.distinguished_name = get_attr(entry, 'distinguishedName')
-        db_user.is_enabled = is_enabled
-        
-        # Új AD Property mezők mentése:
-        db_user.first_name = get_attr(entry, 'givenName')
-        db_user.last_name = get_attr(entry, 'sn')
-        db_user.description = get_attr(entry, 'description')
-        db_user.office = get_attr(entry, 'physicalDeliveryOfficeName')
-        db_user.title = get_attr(entry, 'title')
-        db_user.department = get_attr(entry, 'department')
-        db_user.company = get_attr(entry, 'company')
-        db_user.telephone_number = get_attr(entry, 'telephoneNumber')
-        db_user.mobile = get_attr(entry, 'mobile')
-        
-        db_user.object_sid = sid_str
-        db_user.when_created = get_date_attr(entry, 'whenCreated')
-        db_user.when_changed = get_date_attr(entry, 'whenChanged')
-        db_user.last_synced_at = now
+    # 2. FELHASZNÁLÓK SZINKRONIZÁLÁSA (LAST LOGON DÁTUMMVAL EGYÜTT)
+    user_attrs = [
+        'objectGUID', 'sAMAccountName', 'displayName', 'mail', 'telephoneNumber',
+        'mobile', 'physicalDeliveryOfficeName', 'title', 'department', 'company',
+        'description', 'objectSid', 'distinguishedName', 'userAccountControl',
+        'whenCreated', 'whenChanged', 'memberOf', 'lastLogonTimestamp', 'lastLogon'
+    ]
+    conn.search(search_base=search_base, search_filter='(&(objectCategory=person)(objectClass=user))', search_scope=SUBTREE, attributes=user_attrs)
 
-        # Tagság diff feldolgozás
-        raw_member_of = entry['attributes'].get('memberOf') or []
-        if isinstance(raw_member_of, str): raw_member_of = [raw_member_of]
-        current_dns = set(str(g).lower() for g in raw_member_of)
-        
-        existing_map = {g.distinguished_name.lower(): g for g in db_user.groups}
-        existing_dns = set(existing_map.keys())
+    db_users = {u.sam_account_name.lower(): u for u in db.query(models.ADUser).all()}
 
-        for g_dn in (current_dns - existing_dns):
-            if g_dn in ad_groups_map:
-                db_user.groups.append(ad_groups_map[g_dn])
+    for entry in conn.entries:
+        sam = str(get_attr(entry, 'sAMAccountName', '')).strip()
+        if not sam: continue
+        sam_key = sam.lower()
+
+        dn = str(get_attr(entry, 'distinguishedName', ''))
+        disp_name = str(get_attr(entry, 'displayName') or '')
+        mail = str(get_attr(entry, 'mail') or '')
+        phone = str(get_attr(entry, 'telephoneNumber') or '')
+        mobile = str(get_attr(entry, 'mobile') or '')
+        office = str(get_attr(entry, 'physicalDeliveryOfficeName') or '')
+        title = str(get_attr(entry, 'title') or '')
+        dept = str(get_attr(entry, 'department') or '')
+        comp = str(get_attr(entry, 'company') or '')
+        desc = str(get_attr(entry, 'description') or '').strip()
+        sid = str(get_attr(entry, 'objectSid') or '')
+        w_created = parse_ad_datetime(get_attr(entry, 'whenCreated'))
+        w_changed = parse_ad_datetime(get_attr(entry, 'whenChanged'))
+
+        uac = get_attr(entry, 'userAccountControl') or 512
+        is_enabled = not bool(int(uac) & 2)
+
+        # Utolsó bejelentkezés meghatározása (lastLogonTimestamp vs lastLogon legfrissebbje)
+        dt_llts = parse_ad_filetime(get_attr(entry, 'lastLogonTimestamp'))
+        dt_ll = parse_ad_filetime(get_attr(entry, 'lastLogon'))
+        valid_logon_dts = [d for d in [dt_llts, dt_ll] if d is not None]
+        last_logon_dt = max(valid_logon_dts) if valid_logon_dts else None
+
+        ou_path = extract_ou_path(dn)
+
+        member_of_raw = []
+        try:
+            if 'memberOf' in entry:
+                member_of_raw = entry['memberOf'].values or []
+        except Exception:
+            pass
+        user_status = determine_user_status(member_of_raw, is_enabled)
+
+        if sam_key not in db_users:
+            new_u = models.ADUser(
+                object_guid=get_guid(entry),
+                sam_account_name=sam,
+                display_name=disp_name,
+                mail=mail,
+                telephone_number=phone,
+                mobile=mobile,
+                office=office,
+                title=title,
+                department=dept,
+                company=comp,
+                description=desc,
+                object_sid=sid,
+                distinguished_name=dn,
+                is_enabled=is_enabled,
+                last_logon_date=last_logon_dt,
+                user_status=user_status,
+                ou_path=ou_path,
+                when_created=w_created or now_utc,
+                when_changed=w_changed or now_utc,
+                last_synced_at=now_utc
+            )
+            db.add(new_u)
+            db.flush()
+            db_users[sam_key] = new_u
+            db.add(models.ADAuditLog(
+                timestamp=now_utc,
+                entity_type="USER",
+                entity_name=sam,
+                change_type="USER_CREATED",
+                details=f"Új AD felhasználó létrehozva ({disp_name})",
+                raw_diff=None
+            ))
+            changes_count += 1
+            u_obj = new_u
+        else:
+            u_obj = db_users[sam_key]
+            
+            # MINDEN SZINKRONIZÁLÁSKOR FRISSÜLŐ ADATOK:
+            # 1. Valós létrehozás és módosítás ideje
+            if w_created: u_obj.when_created = w_created
+            if w_changed: u_obj.when_changed = w_changed
+            if desc: u_obj.description = desc
+
+            # 2. Utolsó bejelentkezés frissítése (ha van újabb belépés az AD-ban)
+            if last_logon_dt:
+                if not u_obj.last_logon_date or last_logon_dt > u_obj.last_logon_date:
+                    u_obj.last_logon_date = last_logon_dt
+
+            # Fiók letiltás / feloldás követése
+            if u_obj.is_enabled != is_enabled:
+                ch_type = "USER_ENABLED" if is_enabled else "USER_DISABLED"
+                db.add(models.ADAuditLog(
+                    timestamp=now_utc,
+                    entity_type="USER",
+                    entity_name=sam,
+                    change_type=ch_type,
+                    details="Fiók státusz változott az AD-ban",
+                    raw_diff=None
+                ))
                 changes_count += 1
-                
-        for g_dn in (existing_dns - current_dns):
-            if g_dn in existing_map and existing_map[g_dn] in db_user.groups:
-                db_user.groups.remove(existing_map[g_dn])
+                u_obj.is_enabled = is_enabled
+
+            # Besorolás változás
+            if u_obj.user_status and u_obj.user_status != user_status:
+                db.add(models.ADAuditLog(
+                    timestamp=now_utc,
+                    entity_type="USER",
+                    entity_name=sam,
+                    change_type="STATUS_CHANGED",
+                    details=f"Besorolás változott: '{u_obj.user_status}' -> '{user_status}'",
+                    raw_diff=None
+                ))
+                changes_count += 1
+
+            u_obj.display_name = disp_name or u_obj.display_name
+            if mail: u_obj.mail = mail
+            if phone: u_obj.telephone_number = phone
+            if mobile: u_obj.mobile = mobile
+            if office: u_obj.office = office
+            if title: u_obj.title = title
+            if dept: u_obj.department = dept
+            if comp: u_obj.company = comp
+            if sid: u_obj.object_sid = sid
+            u_obj.distinguished_name = dn
+            u_obj.user_status = user_status
+            u_obj.ou_path = ou_path
+            u_obj.last_synced_at = now_utc
+
+        # Csoporttagságok ellenőrzése és frissítése
+        current_user_group_names = set()
+        for g_dn in member_of_raw:
+            match = re.search(r'CN=([^,]+)', str(g_dn), re.IGNORECASE)
+            if match:
+                current_user_group_names.add(match.group(1).lower())
+
+        existing_db_group_names = {g.sam_account_name.lower() for g in u_obj.groups}
+
+        for ag in (current_user_group_names - existing_db_group_names):
+            g_obj = db_groups.get(ag)
+            if g_obj:
+                u_obj.groups.append(g_obj)
+                db.add(models.ADAuditLog(
+                    timestamp=now_utc,
+                    entity_type="MEMBERSHIP",
+                    entity_name=sam,
+                    change_type="ADDED_TO_GROUP",
+                    details=f"Hozzáadva a(z) '{g_obj.sam_account_name}' csoporthoz",
+                    raw_diff=None
+                ))
+                changes_count += 1
+
+        for rg in (existing_db_group_names - current_user_group_names):
+            g_obj = db_groups.get(rg)
+            if g_obj and g_obj in u_obj.groups:
+                u_obj.groups.remove(g_obj)
+                db.add(models.ADAuditLog(
+                    timestamp=now_utc,
+                    entity_type="MEMBERSHIP",
+                    entity_name=sam,
+                    change_type="REMOVED_FROM_GROUP",
+                    details=f"Eltávolítva a(z) '{g_obj.sam_account_name}' csoportból",
+                    raw_diff=None
+                ))
                 changes_count += 1
 
     db.commit()
     conn.unbind()
-    return {"status": "SUCCESS", "detektalt_valtozasok": changes_count}
+    return {"detektalt_valtozasok": changes_count}
