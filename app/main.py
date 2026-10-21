@@ -20,7 +20,7 @@ models.Base.metadata.create_all(bind=engine)
 db_init = SessionLocal()
 init_default_settings(db_init)
 if not get_setting(db_init, "APP_VERSION"):
-    update_setting(db_init, "APP_VERSION", "1.00")
+    update_setting(db_init, "APP_VERSION", "1.01")
 db_init.close()
 
 scheduler = BackgroundScheduler()
@@ -140,7 +140,7 @@ def trigger_sync_manual(request: Request):
     threading.Thread(target=execute_sync_with_log, args=("Manuális",)).start()
     return {"status": "STARTED"}
 
-# --- GitHub Végpontok (Elfogadják a közvetlenül beküldött adatokat is) ---
+# --- GitHub Végpontok ---
 @app.post("/api/github/test")
 async def api_gh_test(request: Request, db: Session = Depends(get_db)):
     if not get_current_user(request): return JSONResponse(status_code=401, content={})
@@ -151,7 +151,6 @@ async def api_gh_test(request: Request, db: Session = Depends(get_db)):
     if not repo or not token: 
         return {"status": "ERROR", "message": "Kérjük, adja meg a Repó nevét és a Tokent a teszteléshez!"}
     
-    # Automatikus elmentés az adatbázisba, hogy meglegyen
     update_setting(db, "GH_REPO", repo)
     update_setting(db, "GH_TOKEN", token)
     if data.get("branch"): update_setting(db, "GH_BRANCH", data.get("branch"))
@@ -171,25 +170,39 @@ def api_gh_history(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/api/github/push")
 async def api_gh_push(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
-    req_data = await request.json()
-    custom_msg = req_data.get("message", "")
-    
-    repo = req_data.get("repo") or get_setting(db, "GH_REPO")
-    token = req_data.get("token") or get_setting(db, "GH_TOKEN")
-    branch = req_data.get("branch") or get_setting(db, "GH_BRANCH", "main")
-    if not repo or not token: return {"status": "ERROR", "message": "Hiányzó GitHub adatok!"}
-    
-    current_ver = float(get_setting(db, "APP_VERSION", "1.00"))
-    new_ver = current_ver + 0.01
-    new_ver_str = f"{new_ver:.2f}"
-    
-    ok, msg = push_code_to_github(repo, branch, token, new_ver_str, custom_msg)
-    if ok:
-        update_setting(db, "APP_VERSION", new_ver_str)
-        return {"status": "SUCCESS", "message": msg, "new_version": new_ver_str}
-    else:
-        return {"status": "ERROR", "message": msg}
+    if not get_current_user(request): 
+        return JSONResponse(status_code=401, content={"status": "ERROR", "message": "Munkamenet lejárt, kérjük jelentkezzen be újra!"})
+    try:
+        req_data = await request.json()
+        custom_msg = req_data.get("message", "")
+        repo = req_data.get("repo") or get_setting(db, "GH_REPO")
+        token = req_data.get("token") or get_setting(db, "GH_TOKEN")
+        branch = req_data.get("branch") or get_setting(db, "GH_BRANCH", "main")
+        
+        if not repo or not token: 
+            return {"status": "ERROR", "message": "Hiányzó GitHub repó név vagy token!"}
+
+        update_setting(db, "GH_REPO", repo)
+        update_setting(db, "GH_TOKEN", token)
+        update_setting(db, "GH_BRANCH", branch)
+
+        raw_ver = str(get_setting(db, "APP_VERSION", "1.01")).replace("v", "").strip()
+        try:
+            current_ver = float(raw_ver)
+        except ValueError:
+            current_ver = 1.01
+
+        new_ver = current_ver + 0.01
+        new_ver_str = f"{new_ver:.2f}"
+
+        ok, msg = push_code_to_github(repo, branch, token, new_ver_str, custom_msg)
+        if ok:
+            update_setting(db, "APP_VERSION", new_ver_str)
+            return {"status": "SUCCESS", "message": msg, "new_version": new_ver_str}
+        else:
+            return {"status": "ERROR", "message": msg}
+    except Exception as e:
+        return {"status": "ERROR", "message": f"Szerveroldali hiba a feltöltés során: {str(e)}"}
 
 # --- AI Végpontok ---
 @app.get("/api/ai/models")
@@ -242,7 +255,7 @@ def index_page(request: Request, db: Session = Depends(get_db)):
     gh_repo = get_setting(db, "GH_REPO")
     gh_token = get_setting(db, "GH_TOKEN")
     gh_branch = get_setting(db, "GH_BRANCH", "main")
-    app_version = get_setting(db, "APP_VERSION", "1.00")
+    app_version = get_setting(db, "APP_VERSION", "1.01").replace("v", "")
     
     job = scheduler.get_job(JOB_ID)
     interval_min = int(job.trigger.interval.total_seconds() / 60) if job else 0
@@ -521,7 +534,7 @@ def index_page(request: Request, db: Session = Depends(get_db)):
                 }});
                 const data = await res.json();
                 if (data.status === 'ERROR') {{
-                    alert("Hiba történt:\\n\\n" + data.message);
+                    alert("Hiba történt:\\n\\n" + (data.message || data.detail));
                 }} else {{
                     alert(data.message);
                 }}
@@ -583,13 +596,14 @@ def index_page(request: Request, db: Session = Depends(get_db)):
                     body: JSON.stringify({{ repo: repo, token: token, branch: branch, message: customMsg }})
                 }});
                 const data = await res.json();
-                if(data.status === 'SUCCESS') {{
+                if(res.status === 200 && data.status === 'SUCCESS') {{
                     alert(data.message);
                     document.getElementById('app_version_label').innerText = data.new_version;
                     document.getElementById('gh_custom_msg').value = '';
                     loadGitHubHistory();
                 }} else {{
-                    alert("Hiba a feltöltésnél:\\n\\n" + data.message);
+                    const hiba = data.message || data.detail || ("HTTP hiba: " + res.status);
+                    alert("Hiba a feltöltésnél:\\n\\n" + hiba);
                 }}
             }} catch(e) {{
                 alert("Hálózati hiba: " + e);
