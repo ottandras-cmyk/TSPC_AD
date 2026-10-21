@@ -7,100 +7,72 @@ import models
 from config_manager import get_setting
 
 def parse_ad_datetime(val):
-    """AD GeneralizedTime (pl. 20210415132245.0Z) és egyéb dátumformátumok biztos konvertálása"""
-    if not val:
-        return None
-    if isinstance(val, datetime):
-        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    if not val: return None
+    if isinstance(val, datetime): return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
     s = str(val).strip()
-    if not s or s in ["Nincs adat", "None", "NULL"]:
-        return None
-    # GeneralizedTime regex illesztés (pl. 20180415123000.0Z)
+    if not s or s in ["Nincs adat", "None", "NULL"]: return None
     m = re.match(r'^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})', s)
     if m:
         try:
             p = [int(x) for x in m.groups()]
             return datetime(p[0], p[1], p[2], p[3], p[4], p[5], tzinfo=timezone.utc)
-        except Exception:
-            pass
+        except Exception: pass
     for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y%m%d_%H%M%S", "%Y%m%d-%H%M%S"):
-        try:
-            return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
-        except Exception:
-            continue
+        try: return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+        except Exception: continue
     return None
 
 def parse_ad_filetime(val):
-    """Windows FileTime (100-nanoszekundumos intervallum 1601 óta) konvertálása UTC datetime-ra"""
-    if not val:
-        return None
+    if not val: return None
     try:
-        if isinstance(val, (list, tuple)):
-            val = val[0] if len(val) > 0 else None
-        if isinstance(val, datetime):
-            return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+        if isinstance(val, (list, tuple)): val = val[0] if len(val) > 0 else None
+        if isinstance(val, datetime): return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
         val_int = int(str(val).strip())
-        if val_int <= 0 or val_int > 0x7FFFFFFFFFFFFFFF:
-            return None
+        if val_int <= 0 or val_int > 0x7FFFFFFFFFFFFFFF: return None
         epoch_sec = (val_int / 10000000) - 11644473600
-        if epoch_sec < 0:
-            return None
+        if epoch_sec < 0: return None
         return datetime.fromtimestamp(epoch_sec, tz=timezone.utc)
-    except Exception:
-        return None
+    except Exception: return None
 
 def extract_ou_path(dn: str) -> str:
-    if not dn:
-        return ""
+    if not dn: return ""
     ou_matches = re.findall(r'OU=([^,]+)', dn, re.IGNORECASE)
     return ";".join(ou_matches)
 
 def determine_user_status(member_of_list, is_enabled: bool) -> str:
     for g_dn in (member_of_list or []):
         g_str = str(g_dn)
-        if re.search(r'CN=Hosszútávúszabadság', g_str, re.IGNORECASE):
-            return "Hosszútávúszabadság"
-        elif re.search(r'CN=Külsös', g_str, re.IGNORECASE):
-            return "Külsös"
-        elif re.search(r'CN=Távozottak', g_str, re.IGNORECASE):
-            return "Távozottak"
+        if re.search(r'CN=Hosszútávúszabadság', g_str, re.IGNORECASE): return "Hosszútávúszabadság"
+        elif re.search(r'CN=Külsös', g_str, re.IGNORECASE): return "Külsös"
+        elif re.search(r'CN=Távozottak', g_str, re.IGNORECASE): return "Távozottak"
     return "Aktív normál user" if is_enabled else "Letiltva"
 
 def get_attr(entry, name, default=None):
     try:
         if hasattr(entry, name):
             val = getattr(entry, name).value
-            if val is not None:
-                return val
+            if val is not None: return val
         if name in entry:
             val = entry[name].value
-            if val is not None:
-                return val
+            if val is not None: return val
         if hasattr(entry, name) and hasattr(getattr(entry, name), 'raw_values'):
             raw = getattr(entry, name).raw_values
             if raw and raw[0]:
-                if isinstance(raw[0], bytes):
-                    return raw[0].decode('utf-8', errors='ignore')
+                if isinstance(raw[0], bytes): return raw[0].decode('utf-8', errors='ignore')
                 return str(raw[0])
-    except Exception:
-        pass
+    except Exception: pass
     return default
 
 def get_guid(entry):
     try:
         val = entry['objectGUID'].raw_values[0]
-        if isinstance(val, bytes):
-            return uuid.UUID(bytes_le=val)
-    except Exception:
-        pass
+        if isinstance(val, bytes): return uuid.UUID(bytes_le=val)
+    except Exception: pass
     try:
         val = entry['objectGUID'].value
-        if isinstance(val, uuid.UUID):
-            return val
-        if isinstance(val, str):
-            return uuid.UUID(val)
-    except Exception:
-        pass
+        if isinstance(val, uuid.UUID): return val
+        if isinstance(val, str): return uuid.UUID(val)
+    except Exception: pass
     return uuid.uuid4()
 
 def run_ad_sync(db: Session) -> dict:
@@ -118,7 +90,7 @@ def run_ad_sync(db: Session) -> dict:
     now_utc = datetime.now(timezone.utc)
     changes_count = 0
 
-    # 1. BIZTONSÁGI CSOPORTOK ÉS TERJESZTÉSI LISTÁK SZINKRONIZÁLÁSA
+    # 1. CSOPORTOK
     group_attrs = ['objectGUID', 'sAMAccountName', 'distinguishedName', 'description', 'groupType', 'objectSid', 'whenCreated', 'whenChanged']
     conn.search(search_base=search_base, search_filter='(&(objectCategory=group)(objectClass=group))', search_scope=SUBTREE, attributes=group_attrs)
     
@@ -146,6 +118,8 @@ def run_ad_sync(db: Session) -> dict:
                 description=desc,
                 group_type=grp_type_str,
                 object_sid=sid,
+                source_type="AD_SYNC",
+                source_ref="LIVE_AD",
                 when_created=w_created or now_utc,
                 when_changed=w_changed or now_utc,
                 last_synced_at=now_utc
@@ -161,9 +135,11 @@ def run_ad_sync(db: Session) -> dict:
             g.group_type = grp_type_str
             if w_created: g.when_created = w_created
             if w_changed: g.when_changed = w_changed
+            g.source_type = "AD_SYNC"
+            g.source_ref = "LIVE_AD"
             g.last_synced_at = now_utc
 
-    # 2. FELHASZNÁLÓK SZINKRONIZÁLÁSA (LAST LOGON DÁTUMMVAL EGYÜTT)
+    # 2. FELHASZNÁLÓK
     user_attrs = [
         'objectGUID', 'sAMAccountName', 'displayName', 'mail', 'telephoneNumber',
         'mobile', 'physicalDeliveryOfficeName', 'title', 'department', 'company',
@@ -196,7 +172,6 @@ def run_ad_sync(db: Session) -> dict:
         uac = get_attr(entry, 'userAccountControl') or 512
         is_enabled = not bool(int(uac) & 2)
 
-        # Utolsó bejelentkezés meghatározása (lastLogonTimestamp vs lastLogon legfrissebbje)
         dt_llts = parse_ad_filetime(get_attr(entry, 'lastLogonTimestamp'))
         dt_ll = parse_ad_filetime(get_attr(entry, 'lastLogon'))
         valid_logon_dts = [d for d in [dt_llts, dt_ll] if d is not None]
@@ -208,8 +183,7 @@ def run_ad_sync(db: Session) -> dict:
         try:
             if 'memberOf' in entry:
                 member_of_raw = entry['memberOf'].values or []
-        except Exception:
-            pass
+        except Exception: pass
         user_status = determine_user_status(member_of_raw, is_enabled)
 
         if sam_key not in db_users:
@@ -231,6 +205,8 @@ def run_ad_sync(db: Session) -> dict:
                 last_logon_date=last_logon_dt,
                 user_status=user_status,
                 ou_path=ou_path,
+                source_type="AD_SYNC",
+                source_ref="LIVE_AD",
                 when_created=w_created or now_utc,
                 when_changed=w_changed or now_utc,
                 last_synced_at=now_utc
@@ -244,25 +220,22 @@ def run_ad_sync(db: Session) -> dict:
                 entity_name=sam,
                 change_type="USER_CREATED",
                 details=f"Új AD felhasználó létrehozva ({disp_name})",
-                raw_diff=None
+                raw_diff=None,
+                source_type="AD_SYNC",
+                source_ref="LIVE_AD"
             ))
             changes_count += 1
             u_obj = new_u
         else:
             u_obj = db_users[sam_key]
             
-            # MINDEN SZINKRONIZÁLÁSKOR FRISSÜLŐ ADATOK:
-            # 1. Valós létrehozás és módosítás ideje
             if w_created: u_obj.when_created = w_created
             if w_changed: u_obj.when_changed = w_changed
             if desc: u_obj.description = desc
-
-            # 2. Utolsó bejelentkezés frissítése (ha van újabb belépés az AD-ban)
             if last_logon_dt:
                 if not u_obj.last_logon_date or last_logon_dt > u_obj.last_logon_date:
                     u_obj.last_logon_date = last_logon_dt
 
-            # Fiók letiltás / feloldás követése
             if u_obj.is_enabled != is_enabled:
                 ch_type = "USER_ENABLED" if is_enabled else "USER_DISABLED"
                 db.add(models.ADAuditLog(
@@ -271,12 +244,13 @@ def run_ad_sync(db: Session) -> dict:
                     entity_name=sam,
                     change_type=ch_type,
                     details="Fiók státusz változott az AD-ban",
-                    raw_diff=None
+                    raw_diff=None,
+                    source_type="AD_SYNC",
+                    source_ref="LIVE_AD"
                 ))
                 changes_count += 1
                 u_obj.is_enabled = is_enabled
 
-            # Besorolás változás
             if u_obj.user_status and u_obj.user_status != user_status:
                 db.add(models.ADAuditLog(
                     timestamp=now_utc,
@@ -284,7 +258,9 @@ def run_ad_sync(db: Session) -> dict:
                     entity_name=sam,
                     change_type="STATUS_CHANGED",
                     details=f"Besorolás változott: '{u_obj.user_status}' -> '{user_status}'",
-                    raw_diff=None
+                    raw_diff=None,
+                    source_type="AD_SYNC",
+                    source_ref="LIVE_AD"
                 ))
                 changes_count += 1
 
@@ -300,14 +276,15 @@ def run_ad_sync(db: Session) -> dict:
             u_obj.distinguished_name = dn
             u_obj.user_status = user_status
             u_obj.ou_path = ou_path
+            u_obj.source_type = "AD_SYNC"
+            u_obj.source_ref = "LIVE_AD"
             u_obj.last_synced_at = now_utc
 
-        # Csoporttagságok ellenőrzése és frissítése
+        # Csoporttagságok ellenőrzése
         current_user_group_names = set()
         for g_dn in member_of_raw:
             match = re.search(r'CN=([^,]+)', str(g_dn), re.IGNORECASE)
-            if match:
-                current_user_group_names.add(match.group(1).lower())
+            if match: current_user_group_names.add(match.group(1).lower())
 
         existing_db_group_names = {g.sam_account_name.lower() for g in u_obj.groups}
 
@@ -321,7 +298,9 @@ def run_ad_sync(db: Session) -> dict:
                     entity_name=sam,
                     change_type="ADDED_TO_GROUP",
                     details=f"Hozzáadva a(z) '{g_obj.sam_account_name}' csoporthoz",
-                    raw_diff=None
+                    raw_diff=None,
+                    source_type="AD_SYNC",
+                    source_ref="LIVE_AD"
                 ))
                 changes_count += 1
 
@@ -335,7 +314,9 @@ def run_ad_sync(db: Session) -> dict:
                     entity_name=sam,
                     change_type="REMOVED_FROM_GROUP",
                     details=f"Eltávolítva a(z) '{g_obj.sam_account_name}' csoportból",
-                    raw_diff=None
+                    raw_diff=None,
+                    source_type="AD_SYNC",
+                    source_ref="LIVE_AD"
                 ))
                 changes_count += 1
 

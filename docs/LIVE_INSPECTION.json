@@ -1,0 +1,201 @@
+{
+  "database_tables": {
+    "ad_audit_log": [
+      "id (BIGINT)",
+      "timestamp (TIMESTAMP)",
+      "entity_type (VARCHAR(50))",
+      "entity_name (VARCHAR(255))",
+      "change_type (VARCHAR(50))",
+      "details (TEXT)",
+      "raw_diff (TEXT)"
+    ],
+    "ad_group_members": [
+      "user_guid (UUID)",
+      "group_guid (UUID)",
+      "assigned_at (TIMESTAMP)"
+    ],
+    "ad_users": [
+      "object_guid (UUID)",
+      "sam_account_name (VARCHAR(255))",
+      "display_name (VARCHAR(255))",
+      "mail (VARCHAR(255))",
+      "is_enabled (BOOLEAN)",
+      "distinguished_name (TEXT)",
+      "last_synced_at (TIMESTAMP)",
+      "telephone_number (VARCHAR(255))",
+      "object_sid (VARCHAR(100))",
+      "when_created (TIMESTAMP)",
+      "when_changed (TIMESTAMP)",
+      "first_name (VARCHAR(255))",
+      "last_name (VARCHAR(255))",
+      "description (TEXT)",
+      "office (VARCHAR(255))",
+      "title (VARCHAR(255))",
+      "department (VARCHAR(255))",
+      "company (VARCHAR(255))",
+      "mobile (VARCHAR(255))",
+      "last_logon_date (TIMESTAMP)",
+      "user_status (VARCHAR(100))",
+      "ou_path (TEXT)"
+    ],
+    "ad_groups": [
+      "object_guid (UUID)",
+      "sam_account_name (VARCHAR(255))",
+      "distinguished_name (TEXT)",
+      "description (TEXT)",
+      "last_synced_at (TIMESTAMP)",
+      "group_type (VARCHAR(50))",
+      "object_sid (VARCHAR(100))",
+      "when_created (TIMESTAMP)",
+      "when_changed (TIMESTAMP)"
+    ],
+    "app_settings": [
+      "setting_key (VARCHAR(50))",
+      "setting_value (TEXT)",
+      "description (VARCHAR(255))"
+    ],
+    "sync_history": [
+      "id (BIGINT)",
+      "started_at (TIMESTAMP)",
+      "ended_at (TIMESTAMP)",
+      "duration_seconds (BIGINT)",
+      "trigger_type (VARCHAR(50))",
+      "status (VARCHAR(50))",
+      "changes_detected (BIGINT)",
+      "error_message (TEXT)"
+    ]
+  },
+  "codebase": {
+    "app/doc_generator.py": {
+      "classes": [],
+      "functions": [
+        "get_live_ddl",
+        "get_codebase_map",
+        "call_ollama",
+        "build_all_docs"
+      ]
+    },
+    "app/ldap_client.py": {
+      "classes": [],
+      "functions": [
+        "parse_ad_server",
+        "test_ad_connection"
+      ]
+    },
+    "app/config_manager.py": {
+      "classes": [],
+      "functions": [
+        "get_setting",
+        "update_setting",
+        "init_default_settings"
+      ]
+    },
+    "app/github_sync.py": {
+      "classes": [],
+      "functions": [
+        "_request",
+        "test_github_connection",
+        "get_latest_github_version",
+        "get_github_commit_history",
+        "push_code_to_github"
+      ]
+    },
+    "app/backup_manager.py": {
+      "classes": [],
+      "functions": [
+        "serialize_val",
+        "parse_dt",
+        "parse_uuid",
+        "generate_sql_insert",
+        "create_backup",
+        "list_backups",
+        "restore_backup",
+        "delete_backup"
+      ]
+    },
+    "app/main.py": {
+      "classes": [],
+      "functions": [
+        "execute_sync_with_log",
+        "scheduled_sync_job",
+        "get_current_user",
+        "login_page",
+        "process_login",
+        "process_logout",
+        "get_sync_status",
+        "get_sync_history",
+        "get_all_users",
+        "get_user_history",
+        "get_all_groups",
+        "trigger_sync_manual",
+        "async_import_worker",
+        "api_history_progress",
+        "get_backups_list",
+        "download_backup_endpoint",
+        "delete_backup_endpoint",
+        "api_gh_get_version",
+        "api_gh_history",
+        "get_ai_models",
+        "index_page",
+        "on_progress"
+      ]
+    },
+    "app/database.py": {
+      "classes": [],
+      "functions": [
+        "get_db"
+      ]
+    },
+    "app/ai_assistant.py": {
+      "classes": [],
+      "functions": [
+        "fetch_ollama_models",
+        "extract_search_terms",
+        "build_database_context",
+        "ask_ollama"
+      ]
+    },
+    "app/sync_engine.py": {
+      "classes": [],
+      "functions": [
+        "parse_ad_datetime",
+        "parse_ad_filetime",
+        "extract_ou_path",
+        "determine_user_status",
+        "get_attr",
+        "get_guid",
+        "run_ad_sync"
+      ]
+    },
+    "app/models.py": {
+      "classes": [
+        "ADUser",
+        "ADGroup",
+        "ADAuditLog",
+        "SyncHistory",
+        "SystemSetting"
+      ],
+      "functions": []
+    },
+    "app/history_importer.py": {
+      "classes": [],
+      "functions": [
+        "parse_ad_datetime",
+        "extract_ou_path",
+        "read_csv_lines_safe",
+        "scan_csv_directory",
+        "parse_snapshot_state",
+        "fast_backfill_extra_data",
+        "run_historical_replay"
+      ]
+    },
+    "app/auth.py": {
+      "classes": [],
+      "functions": [
+        "authenticate_ad_user",
+        "create_session_token",
+        "verify_session_token"
+      ]
+    }
+  }
+}

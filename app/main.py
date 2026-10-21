@@ -20,19 +20,94 @@ from ai_assistant import fetch_ollama_models, ask_ollama
 from github_sync import test_github_connection, push_code_to_github, get_github_commit_history, get_latest_github_version
 from backup_manager import create_backup, list_backups, restore_backup, delete_backup, BACKUP_DIR
 from history_importer import scan_csv_directory, run_historical_replay, fast_backfill_extra_data
+from telemetry import (
+    collect_and_save_telemetry, get_live_telemetry, get_telemetry_history,
+    log_web_activity, get_web_access_logs, get_host_ip_history,
+    register_active_session, update_active_session, close_active_session, get_active_sessions_info
+)
 
 models.Base.metadata.create_all(bind=engine)
 
-# Automatikus adatbázis oszlop-migráció
-try:
-    with engine.connect() as conn:
-        conn.execute(text("ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS last_logon_date TIMESTAMP WITH TIME ZONE;"))
-        conn.execute(text("ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS user_status VARCHAR(100);"))
-        conn.execute(text("ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS ou_path TEXT;"))
-        conn.execute(text("ALTER TABLE ad_audit_log ALTER COLUMN raw_diff TYPE TEXT USING raw_diff::text;"))
-        conn.commit()
-except Exception:
-    pass
+migration_statements = [
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS last_logon_date TIMESTAMP WITH TIME ZONE;",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS user_status VARCHAR(100);",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS ou_path TEXT;",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) DEFAULT 'AD_SYNC';",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS source_ref VARCHAR(255) DEFAULT 'LIVE_AD';",
+    "ALTER TABLE ad_groups ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) DEFAULT 'AD_SYNC';",
+    "ALTER TABLE ad_groups ADD COLUMN IF NOT EXISTS source_ref VARCHAR(255) DEFAULT 'LIVE_AD';",
+    "ALTER TABLE ad_audit_log ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) DEFAULT 'AD_SYNC';",
+    "ALTER TABLE ad_audit_log ADD COLUMN IF NOT EXISTS source_ref VARCHAR(255) DEFAULT 'LIVE_AD';",
+    "ALTER TABLE ad_audit_log ALTER COLUMN raw_diff TYPE TEXT USING raw_diff::text;",
+    """CREATE TABLE IF NOT EXISTS system_telemetry (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        cpu_percent FLOAT DEFAULT 0.0,
+        cpu_temp_c FLOAT,
+        ram_total_mb FLOAT DEFAULT 0.0,
+        ram_used_mb FLOAT DEFAULT 0.0,
+        ram_percent FLOAT DEFAULT 0.0,
+        disk_total_gb FLOAT DEFAULT 0.0,
+        disk_used_gb FLOAT DEFAULT 0.0,
+        disk_free_gb FLOAT DEFAULT 0.0,
+        db_size_mb FLOAT DEFAULT 0.0,
+        gpu_name VARCHAR(100),
+        gpu_util_percent FLOAT,
+        gpu_mem_used_mb FLOAT,
+        gpu_mem_total_mb FLOAT,
+        gpu_temp_c FLOAT,
+        gpu_power_w FLOAT,
+        llm_tokens_prompt INTEGER DEFAULT 0,
+        llm_tokens_eval INTEGER DEFAULT 0,
+        llm_tokens_total INTEGER DEFAULT 0
+    );""",
+    """CREATE TABLE IF NOT EXISTS web_access_log (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        username VARCHAR(255) NOT NULL,
+        client_ip VARCHAR(100) NOT NULL,
+        browser VARCHAR(100),
+        os_name VARCHAR(100),
+        device_type VARCHAR(50),
+        location VARCHAR(255),
+        user_agent TEXT,
+        action VARCHAR(100) NOT NULL,
+        details TEXT,
+        status VARCHAR(50) DEFAULT 'SIKERES'
+    );""",
+    "ALTER TABLE web_access_log ADD COLUMN IF NOT EXISTS browser VARCHAR(100);",
+    "ALTER TABLE web_access_log ADD COLUMN IF NOT EXISTS os_name VARCHAR(100);",
+    "ALTER TABLE web_access_log ADD COLUMN IF NOT EXISTS device_type VARCHAR(50);",
+    "ALTER TABLE web_access_log ADD COLUMN IF NOT EXISTS location VARCHAR(255);",
+    "ALTER TABLE web_access_log ADD COLUMN IF NOT EXISTS user_agent TEXT;",
+    """CREATE TABLE IF NOT EXISTS host_ip_history (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        ip_address VARCHAR(100) NOT NULL,
+        hostname VARCHAR(255),
+        details TEXT
+    );""",
+    """CREATE TABLE IF NOT EXISTS active_web_sessions (
+        session_id VARCHAR(100) PRIMARY KEY,
+        username VARCHAR(255) NOT NULL,
+        login_time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        last_activity TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        client_ip VARCHAR(100),
+        browser VARCHAR(100),
+        os_name VARCHAR(100),
+        device_type VARCHAR(50),
+        location VARCHAR(255),
+        user_agent TEXT
+    );"""
+]
+
+for stmt in migration_statements:
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(stmt))
+            conn.commit()
+    except Exception:
+        pass
 
 db_init = SessionLocal()
 init_default_settings(db_init)
@@ -40,6 +115,7 @@ db_init.close()
 
 scheduler = BackgroundScheduler()
 JOB_ID = "ad_sync_job"
+TELEMETRY_JOB_ID = "telemetry_job"
 sync_state = {"is_syncing": False, "last_run": None, "last_changes": 0}
 sync_lock = threading.Lock()
 
@@ -84,6 +160,15 @@ def execute_sync_with_log(trigger_type: str):
 def scheduled_sync_job():
     execute_sync_with_log("Ütemezett")
 
+def scheduled_telemetry_job():
+    db = SessionLocal()
+    try:
+        collect_and_save_telemetry(db)
+    except Exception:
+        pass
+    finally:
+        db.close()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = SessionLocal()
@@ -91,14 +176,31 @@ async def lifespan(app: FastAPI):
     db.close()
     if sync_minutes > 0:
         scheduler.add_job(scheduled_sync_job, 'interval', minutes=sync_minutes, id=JOB_ID)
+    scheduler.add_job(scheduled_telemetry_job, 'interval', minutes=15, id=TELEMETRY_JOB_ID)
     scheduler.start()
+    
+    def startup_worker():
+        init_db = SessionLocal()
+        try:
+            collect_and_save_telemetry(init_db)
+            log_web_activity(init_db, None, "SYSTEM", "RENDSZER_INDULÁS", "AD Tracker szerver és telemetria sikeresen elindult", "SIKERES")
+        except Exception:
+            pass
+        finally:
+            init_db.close()
+            
+    threading.Thread(target=startup_worker).start()
     yield
     scheduler.shutdown()
 
 app = FastAPI(title="AD Tracker", lifespan=lifespan)
 
-def get_current_user(request: Request):
+def get_current_session(request: Request):
     return verify_session_token(request.cookies.get(COOKIE_NAME))
+
+def get_current_user(request: Request):
+    user, _ = get_current_session(request)
+    return user
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, error: str = None):
@@ -119,15 +221,26 @@ def login_page(request: Request, error: str = None):
 </form></div></body></html>"""
 
 @app.post("/login")
-def process_login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+def process_login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     success, result = authenticate_ad_user(db, username, password)
-    if not success: return RedirectResponse(url="/login?error=Hibas+adatok", status_code=303)
+    if not success:
+        log_web_activity(db, request, username, "BEJELENTKEZÉS", "Hibás felhasználónév vagy jelszó", "SIKERTELEN")
+        return RedirectResponse(url="/login?error=Hibas+adatok", status_code=303)
+    
+    token, session_id = create_session_token(result)
+    register_active_session(db, request, session_id, result)
+    log_web_activity(db, request, result, "BEJELENTKEZÉS", f"Sikeres belépés (Munkamenet: {session_id[:8]})", "SIKERES")
+    
     response = RedirectResponse(url="/", status_code=303)
-    response.set_cookie(key=COOKIE_NAME, value=create_session_token(result), httponly=True, max_age=86400, samesite="lax")
+    response.set_cookie(key=COOKIE_NAME, value=token, httponly=True, max_age=86400 * 7, samesite="lax")
     return response
 
 @app.get("/logout")
-def process_logout():
+def process_logout(request: Request, db: Session = Depends(get_db)):
+    user, session_id = get_current_session(request)
+    if user:
+        close_active_session(db, session_id)
+        log_web_activity(db, request, user, "KIJELENTKEZÉS", f"Kijelentkezés (Munkamenet: {session_id[:8] if session_id else '-'})", "SIKERES")
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(COOKIE_NAME)
     return response
@@ -153,13 +266,9 @@ def get_all_users(request: Request, db: Session = Depends(get_db)):
         users = db.query(models.ADUser).all()
         result = []
         for u in users:
-            u_status = getattr(u, "user_status", None)
-            if not u_status:
-                u_status = "Aktív normál user" if getattr(u, "is_enabled", True) else "Letiltva"
-            
+            u_status = getattr(u, "user_status", None) or ("Aktív normál user" if getattr(u, "is_enabled", True) else "Letiltva")
             last_logon_dt = getattr(u, "last_logon_date", None)
             last_logon_str = last_logon_dt.strftime("%Y-%m-%d %H:%M") if last_logon_dt and hasattr(last_logon_dt, "strftime") else "-"
-            ou_path = getattr(u, "ou_path", None) or "-"
             w_created = getattr(u, "when_created", None)
             w_changed = getattr(u, "when_changed", None)
 
@@ -172,7 +281,7 @@ def get_all_users(request: Request, db: Session = Depends(get_db)):
                 "enabled": getattr(u, "is_enabled", True),
                 "status": u_status,
                 "last_logon": last_logon_str,
-                "ou": ou_path,
+                "ou": getattr(u, "ou_path", None) or "-",
                 "phone": getattr(u, "telephone_number", None) or "-",
                 "mobile": getattr(u, "mobile", None) or "-",
                 "title": getattr(u, "title", None) or "-",
@@ -181,6 +290,8 @@ def get_all_users(request: Request, db: Session = Depends(get_db)):
                 "office": getattr(u, "office", None) or "-",
                 "desc": getattr(u, "description", None) or "-",
                 "sid": getattr(u, "object_sid", None) or "-",
+                "source_type": getattr(u, "source_type", "AD_SYNC") or "AD_SYNC",
+                "source_ref": getattr(u, "source_ref", "LIVE_AD") or "LIVE_AD",
                 "created": w_created.strftime("%Y-%m-%d %H:%M") if w_created else "-",
                 "changed": w_changed.strftime("%Y-%m-%d %H:%M") if w_changed else "-",
                 "groups": [{"name": getattr(g, "sam_account_name", "-"), "type": getattr(g, "group_type", None) or "Ismeretlen"} for g in getattr(u, "groups", [])]
@@ -200,7 +311,9 @@ def get_user_history(sam: str, request: Request, db: Session = Depends(get_db)):
         return [{
             "timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S") if l.timestamp else "-",
             "change_type": l.change_type,
-            "details": l.details or ""
+            "details": l.details or "",
+            "source_type": getattr(l, "source_type", "AD_SYNC") or "AD_SYNC",
+            "source_ref": getattr(l, "source_ref", "LIVE_AD") or "LIVE_AD"
         } for l in logs]
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -210,15 +323,66 @@ def get_all_groups(request: Request, db: Session = Depends(get_db)):
     if not get_current_user(request): return JSONResponse(status_code=401, content={})
     try:
         groups = db.query(models.ADGroup).all()
-        return [{"sam": g.sam_account_name, "desc": g.description or "-", "type": g.group_type or "Ismeretlen", "sid": g.object_sid or "-", "created": g.when_created.strftime("%Y-%m-%d %H:%M") if g.when_created else "-", "changed": g.when_changed.strftime("%Y-%m-%d %H:%M") if g.when_changed else "-", "members": [u.sam_account_name for u in g.members]} for g in groups]
+        return [{
+            "sam": g.sam_account_name,
+            "desc": g.description or "-",
+            "type": g.group_type or "Ismeretlen",
+            "sid": g.object_sid or "-",
+            "source_type": getattr(g, "source_type", "AD_SYNC") or "AD_SYNC",
+            "source_ref": getattr(g, "source_ref", "LIVE_AD") or "LIVE_AD",
+            "created": g.when_created.strftime("%Y-%m-%d %H:%M") if g.when_created else "-",
+            "changed": g.when_changed.strftime("%Y-%m-%d %H:%M") if g.when_changed else "-",
+            "members": [u.sam_account_name for u in g.members]
+        } for g in groups]
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/api/sync")
-def trigger_sync_manual(request: Request):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+def trigger_sync_manual(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
+    log_web_activity(db, request, user, "AD_SZINKRON", "Manuális szinkronizálás indítva", "SIKERES")
     threading.Thread(target=execute_sync_with_log, args=("Manuális",)).start()
     return {"status": "STARTED"}
+
+# --- TELEMETRIA, MUNKAMENETEK ÉS WEB AUDIT ---
+@app.get("/api/telemetry/live")
+def api_telemetry_live(request: Request, db: Session = Depends(get_db)):
+    user, session_id = get_current_session(request)
+    if not user: return JSONResponse(status_code=401, content={})
+    update_active_session(db, session_id)
+    return get_live_telemetry(db)
+
+@app.get("/api/telemetry/sessions")
+def api_telemetry_sessions(request: Request, db: Session = Depends(get_db)):
+    user, session_id = get_current_session(request)
+    if not user: return JSONResponse(status_code=401, content={})
+    update_active_session(db, session_id)
+    return get_active_sessions_info(db, session_id)
+
+@app.get("/api/telemetry/history")
+def api_telemetry_history(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    return {"history": get_telemetry_history(db, limit=96)}
+
+@app.get("/api/telemetry/web-logs")
+def api_telemetry_web_logs(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    return {"logs": get_web_access_logs(db, limit=100)}
+
+@app.get("/api/telemetry/host-ip-history")
+def api_telemetry_host_ip_history(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    return {"history": get_host_ip_history(db, limit=50)}
+
+@app.post("/api/telemetry/collect")
+def api_telemetry_collect(request: Request, db: Session = Depends(get_db)):
+    user, session_id = get_current_session(request)
+    if not user: return JSONResponse(status_code=401, content={})
+    update_active_session(db, session_id)
+    rec = collect_and_save_telemetry(db)
+    log_web_activity(db, request, user, "MÉRÉS_RÖGZÍTÉS", f"Azonnali telemetria mérés azonosító: #{rec.id}", "SIKERES")
+    return {"status": "SUCCESS", "id": rec.id, "timestamp": rec.timestamp.strftime("%Y-%m-%d %H:%M:%S")}
 
 # --- TÖRTÉNETI CSV IMPORT ÉS GYORS BACKFILL ---
 @app.post("/api/history/upload-files")
@@ -247,9 +411,11 @@ async def api_history_scan(request: Request):
 
 @app.post("/api/history/backfill")
 async def api_history_backfill(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
     data = await request.json()
     folder = data.get("folder", "csv_imports")
+    log_web_activity(db, request, user, "CSV_BACKFILL", f"Mappa: {folder}", "SIKERES")
     return fast_backfill_extra_data(db, folder)
 
 def async_import_worker(folder: str):
@@ -271,11 +437,13 @@ def async_import_worker(folder: str):
         import_progress["is_running"] = False
 
 @app.post("/api/history/import")
-async def api_history_import(request: Request):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+async def api_history_import(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
     if import_progress["is_running"]: return {"status": "ERROR", "message": "Importálás folyamatban!"}
     data = await request.json()
     folder = data.get("folder", "csv_imports")
+    log_web_activity(db, request, user, "CSV_IMPORT_INDÍTÁS", f"Mappa: {folder}", "SIKERES")
     threading.Thread(target=async_import_worker, args=(folder,)).start()
     return {"status": "STARTED"}
 
@@ -295,28 +463,42 @@ async def create_backup_endpoint(request: Request, db: Session = Depends(get_db)
     user = get_current_user(request)
     if not user: return JSONResponse(status_code=401, content={})
     data = await request.json()
-    return create_backup(db, comment=data.get("comment", ""), user=user)
+    comment = data.get("comment", "")
+    res = create_backup(db, comment=comment, user=user)
+    if res.get("status") == "SUCCESS":
+        log_web_activity(db, request, user, "MENTÉS_LÉTREHOZÁS", f"Fájl: {res.get('filename')}, Megjegyzés: {comment}", "SIKERES")
+    return res
 
 @app.post("/api/backups/restore")
 async def restore_backup_endpoint(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
     data = await request.json()
-    return restore_backup(db, filename=data.get("filename", ""))
+    filename = data.get("filename", "")
+    res = restore_backup(db, filename=filename)
+    st = "SIKERES" if res.get("status") == "SUCCESS" else "HIBA"
+    log_web_activity(db, request, user, "MENTÉS_VISSZAÁLLÍTÁS", f"Fájl: {filename}", st)
+    return res
 
 @app.get("/api/backups/download/{filename}")
-def download_backup_endpoint(filename: str, request: Request):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+def download_backup_endpoint(filename: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
     safe_name = os.path.basename(filename)
     fpath = os.path.join(BACKUP_DIR, safe_name)
     if not os.path.isfile(fpath): return JSONResponse(status_code=404, content={"error": "Fájl nem található"})
+    log_web_activity(db, request, user, "MENTÉS_LETÖLTÉS", f"Fájl: {safe_name}", "SIKERES")
     return FileResponse(fpath, filename=safe_name, media_type="application/zip")
 
 @app.delete("/api/backups/{filename}")
-def delete_backup_endpoint(filename: str, request: Request):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
-    return delete_backup(filename)
+def delete_backup_endpoint(filename: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
+    res = delete_backup(filename)
+    log_web_activity(db, request, user, "MENTÉS_TÖRLÉS", f"Fájl: {filename}", "SIKERES")
+    return res
 
-# --- GitHub Végpontok (Élő GitHub verzióval) ---
+# --- GITHUB INTEGRÁCIÓ ---
 @app.get("/api/github/version")
 def api_gh_get_version(request: Request, db: Session = Depends(get_db)):
     if not get_current_user(request): return JSONResponse(status_code=401, content={})
@@ -326,7 +508,6 @@ def api_gh_get_version(request: Request, db: Session = Depends(get_db)):
     if not repo or not token:
         local_ver = get_setting(db, "APP_VERSION", "1.00").replace("v", "")
         return {"version": local_ver, "source": "local"}
-    
     gh_version = get_latest_github_version(repo, token, branch)
     update_setting(db, "APP_VERSION", gh_version)
     return {"version": gh_version, "source": "github"}
@@ -356,7 +537,13 @@ def api_gh_history(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/api/github/push")
 async def api_gh_push(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={"status": "ERROR", "message": "Munkamenet lejárt!"})
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={"status": "ERROR", "message": "Munkamenet lejárt!"})
+    try:
+        from doc_generator import build_all_docs
+        build_all_docs(db)
+    except Exception:
+        pass
     try:
         req_data = await request.json()
         custom_msg = req_data.get("message", "")
@@ -365,23 +552,22 @@ async def api_gh_push(request: Request, db: Session = Depends(get_db)):
         branch = req_data.get("branch") or get_setting(db, "GH_BRANCH", "main")
         
         current_gh_ver = get_latest_github_version(repo, token, branch)
-        try:
-            curr_float = float(current_gh_ver)
-        except ValueError:
-            curr_float = 1.00
-
-        new_ver = curr_float + 0.01
-        new_ver_str = f"{new_ver:.2f}"
+        try: curr_float = float(current_gh_ver)
+        except ValueError: curr_float = 1.00
+        new_ver_str = f"{curr_float + 0.01:.2f}"
 
         ok, msg = push_code_to_github(repo, branch, token, new_ver_str, custom_msg)
         if ok:
             update_setting(db, "APP_VERSION", new_ver_str)
+            log_web_activity(db, request, user, "GITHUB_PUSH", f"Verzió: v{new_ver_str}, Megjegyzés: {custom_msg}", "SIKERES")
             return {"status": "SUCCESS", "message": msg, "new_version": new_ver_str}
+        
+        log_web_activity(db, request, user, "GITHUB_PUSH", f"Sikertelen push: {msg}", "HIBA")
         return {"status": "ERROR", "message": msg}
     except Exception as e:
         return {"status": "ERROR", "message": f"Hiba: {str(e)}"}
 
-# --- AI Végpontok ---
+# --- AI VÉGPONTOK ---
 @app.get("/api/ai/models")
 def get_ai_models(request: Request, db: Session = Depends(get_db)):
     if not get_current_user(request): return JSONResponse(status_code=401, content={})
@@ -389,13 +575,17 @@ def get_ai_models(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/api/ai/ask")
 async def ask_ai_endpoint(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
     data = await request.json()
-    return ask_ollama(db, data.get("model"), data.get("prompt"))
+    res = ask_ollama(db, data.get("model"), data.get("prompt"))
+    log_web_activity(db, request, user, "AI_LEKÉRDEZÉS", f"Modell: {data.get('model')}", "SIKERES" if res.get("status") == "SUCCESS" else "HIBA")
+    return res
 
 @app.post("/api/settings")
 async def save_settings(request: Request, db: Session = Depends(get_db)):
-    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
     data = await request.json()
     update_setting(db, "AD_SERVER", data.get("AD_SERVER", ""))
     update_setting(db, "AD_USER", data.get("AD_USER", ""))
@@ -410,9 +600,10 @@ async def save_settings(request: Request, db: Session = Depends(get_db)):
     update_setting(db, "SYNC_INTERVAL_MINUTES", str(minutes))
     if scheduler.get_job(JOB_ID): scheduler.remove_job(JOB_ID)
     if minutes > 0: scheduler.add_job(scheduled_sync_job, 'interval', minutes=minutes, id=JOB_ID)
+    
+    log_web_activity(db, request, user, "BEÁLLÍTÁS_MENTÉS", "Rendszer és AD konfigurációk frissítve", "SIKERES")
     return {"status": "SUCCESS"}
 
-# --- FŐOLDAL BETÖLTÉSE A SABLONBÓL ---
 HTML_TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 
 @app.get("/", response_class=HTMLResponse)
@@ -425,7 +616,9 @@ def index_page(request: Request, db: Session = Depends(get_db)):
     for l in logs:
         badge = "#16a34a" if "ADDED" in l.change_type or "CREATED" in l.change_type else ("#dc2626" if "REMOVED" in l.change_type or "DISABLED" in l.change_type else "#2563eb")
         t = l.timestamp.strftime("%Y-%m-%d %H:%M") if l.timestamp else ""
-        rows += f'<tr><td>{t}</td><td><b>{l.entity_name}</b></td><td><span style="background:{badge}; color:white; padding:3px 6px; border-radius:4px; font-size:11px;">{l.change_type}</span></td><td>{l.details}</td></tr>'
+        src = getattr(l, "source_ref", "AD") or "AD"
+        src_badge = f'<span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-size:10px; font-family:monospace; margin-left:6px;">{src}</span>'
+        rows += f'<tr><td>{t}</td><td><b>{l.entity_name}</b> {src_badge}</td><td><span style="background:{badge}; color:white; padding:3px 6px; border-radius:4px; font-size:11px;">{l.change_type}</span></td><td>{l.details}</td></tr>'
 
     if not rows:
         rows = '<tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:20px;">Nincs naplózott változás.</td></tr>'

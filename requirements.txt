@@ -1,0 +1,15 @@
+apscheduler>=3.10.4
+fastapi>=0.110.0
+hashlib
+hmac
+ipaddress
+ldap3>=2.9.1
+main
+psycopg2-binary>=2.9.9
+python-multipart>=0.0.9
+socket
+sqlalchemy>=2.0.28
+ssl
+subprocess
+telemetry
+uvicorn>=0.28.0

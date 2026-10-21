@@ -111,7 +111,6 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
     users = {}
     groups = {}
 
-    # Groups_*.csv -> Név, Típus, Létrehozás ideje, Leírás
     for gf in snapshot_item["group_files"]:
         rows = read_csv_lines_safe(gf)
         if len(rows) <= 1: continue
@@ -126,7 +125,6 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
                 "description": row[3].strip() if len(row) > 3 else ""
             }
 
-    # alluser*.csv
     alluser_map = {}
     for af in snapshot_item["alluser_files"]:
         rows = read_csv_lines_safe(af)
@@ -141,7 +139,6 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
                 "ou": row[6].strip() if len(row) > 6 else ""
             }
 
-    # *Users_*.csv
     for uf in snapshot_item["user_files"]:
         rows = read_csv_lines_safe(uf)
         if len(rows) <= 1: continue
@@ -198,14 +195,10 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
                     "groups": set()
                 }
             else:
-                if c_date and not users[sam_key]["created"]:
-                    users[sam_key]["created"] = c_date
-                if last_logon and not users[sam_key]["last_logon"]:
-                    users[sam_key]["last_logon"] = last_logon
-                if user_status != "AlapAdat":
-                    users[sam_key]["status"] = user_status
-                if ou_val and not users[sam_key]["ou_path"]:
-                    users[sam_key]["ou_path"] = ou_val
+                if c_date and not users[sam_key]["created"]: users[sam_key]["created"] = c_date
+                if last_logon and not users[sam_key]["last_logon"]: users[sam_key]["last_logon"] = last_logon
+                if user_status != "AlapAdat": users[sam_key]["status"] = user_status
+                if ou_val and not users[sam_key]["ou_path"]: users[sam_key]["ou_path"] = ou_val
 
             if grp_name and grp_name.lower() not in KNOWN_STATUS_WORDS:
                 users[sam_key]["groups"].add(grp_name)
@@ -217,10 +210,14 @@ def parse_snapshot_state(snapshot_item: dict) -> dict:
                         "description": ""
                     }
 
-    return {"users": users, "groups": groups, "timestamp": snapshot_item["dt_obj"]}
+    return {
+        "users": users,
+        "groups": groups,
+        "timestamp": snapshot_item["dt_obj"],
+        "timestamp_str": snapshot_item["timestamp_str"]
+    }
 
 def fast_backfill_extra_data(db, folder_path: str) -> dict:
-    """Gyorsan beolvassa a CSV-kből a CreationDate, Description, LastLogon, Status, OU mezőket és frissíti a meglévő rekordokat"""
     scan_res = scan_csv_directory(folder_path)
     if scan_res.get("status") == "ERROR": return scan_res
 
@@ -232,40 +229,37 @@ def fast_backfill_extra_data(db, folder_path: str) -> dict:
 
     for snap in snapshots:
         state = parse_snapshot_state(snap)
+        ts_ref = f"CSV_{snap['timestamp_str']}"
         for sam_key, u in state["users"].items():
             if sam_key not in user_extras:
                 user_extras[sam_key] = {
                     "created": u.get("created"),
                     "last_logon": u.get("last_logon"),
                     "status": u.get("status"),
-                    "ou_path": u.get("ou_path")
+                    "ou_path": u.get("ou_path"),
+                    "source_ref": ts_ref
                 }
             else:
-                if not user_extras[sam_key]["created"] and u.get("created"):
-                    user_extras[sam_key]["created"] = u.get("created")
-                if u.get("last_logon"):
-                    user_extras[sam_key]["last_logon"] = u.get("last_logon")
-                if u.get("status") != "AlapAdat":
-                    user_extras[sam_key]["status"] = u.get("status")
-                if u.get("ou_path"):
-                    user_extras[sam_key]["ou_path"] = u.get("ou_path")
+                if not user_extras[sam_key]["created"] and u.get("created"): user_extras[sam_key]["created"] = u.get("created")
+                if u.get("last_logon"): user_extras[sam_key]["last_logon"] = u.get("last_logon")
+                if u.get("status") != "AlapAdat": user_extras[sam_key]["status"] = u.get("status")
+                if u.get("ou_path"): user_extras[sam_key]["ou_path"] = u.get("ou_path")
+                user_extras[sam_key]["source_ref"] = ts_ref
 
         for g_key, g in state["groups"].items():
             if g_key not in group_extras:
                 group_extras[g_key] = {
                     "created": g.get("created"),
                     "description": g.get("description"),
-                    "type": g.get("type")
+                    "type": g.get("type"),
+                    "source_ref": ts_ref
                 }
             else:
-                if not group_extras[g_key]["created"] and g.get("created"):
-                    group_extras[g_key]["created"] = g.get("created")
-                if g.get("description"):
-                    group_extras[g_key]["description"] = g.get("description")
-                if g.get("type"):
-                    group_extras[g_key]["type"] = g.get("type")
+                if not group_extras[g_key]["created"] and g.get("created"): group_extras[g_key]["created"] = g.get("created")
+                if g.get("description"): group_extras[g_key]["description"] = g.get("description")
+                if g.get("type"): group_extras[g_key]["type"] = g.get("type")
+                group_extras[g_key]["source_ref"] = ts_ref
 
-    # 1. Felhasználók frissítése
     db_users = db.query(models.ADUser).all()
     updated_users = 0
     for db_u in db_users:
@@ -276,9 +270,10 @@ def fast_backfill_extra_data(db, folder_path: str) -> dict:
             if extra.get("last_logon"): db_u.last_logon_date = extra["last_logon"]
             if extra.get("status") and extra["status"] != "AlapAdat": db_u.user_status = extra["status"]
             if extra.get("ou_path"): db_u.ou_path = extra["ou_path"]
+            db_u.source_type = "CSV_IMPORT"
+            db_u.source_ref = extra.get("source_ref", "CSV_BACKFILL")
             updated_users += 1
 
-    # 2. Csoportok frissítése
     db_groups = db.query(models.ADGroup).all()
     updated_groups = 0
     for db_g in db_groups:
@@ -288,12 +283,14 @@ def fast_backfill_extra_data(db, folder_path: str) -> dict:
             if g_extra.get("created"): db_g.when_created = g_extra["created"]
             if g_extra.get("description"): db_g.description = g_extra["description"]
             if g_extra.get("type"): db_g.group_type = g_extra["type"]
+            db_g.source_type = "CSV_IMPORT"
+            db_g.source_ref = g_extra.get("source_ref", "CSV_BACKFILL")
             updated_groups += 1
 
     db.commit()
     return {
         "status": "SUCCESS",
-        "message": f"Sikeres frissítés! {updated_users} db felhasználó (Valós létrehozási idő, utolsó belépés, OU) és {updated_groups} db csoport (Létrehozási idő, leírás) frissítve az adatbázisban!"
+        "message": f"Sikeres frissítés! {updated_users} db felhasználó és {updated_groups} db csoport eredete és adatai rögzítve."
     }
 
 def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
@@ -313,8 +310,10 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
 
     for idx, snap in enumerate(snapshots):
         ts = snap["dt_obj"]
-        ts_str = snap["datetime"]
-        if progress_callback: progress_callback(idx + 1, total_snaps, ts_str)
+        ts_str = snap["timestamp_str"]
+        source_label = f"CSV_{ts_str}"
+        
+        if progress_callback: progress_callback(idx + 1, total_snaps, snap["datetime"])
 
         current_state = parse_snapshot_state(snap)
         curr_users = current_state["users"]
@@ -330,6 +329,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     distinguished_name=f"CN={g_info['name']}",
                     description=g_info["description"],
                     group_type=g_info["type"],
+                    source_type="CSV_IMPORT",
+                    source_ref=source_label,
                     when_created=g_info["created"] or ts,
                     when_changed=ts,
                     last_synced_at=ts
@@ -341,7 +342,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="GROUP", entity_name=g_info["name"],
                         change_type="GROUP_CREATED", details=f"Új AD csoport detektálva ({g_info['type']})",
-                        raw_diff=None
+                        raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
                     ))
                     snap_events += 1
             else:
@@ -349,6 +350,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                 if g_info.get("created"): grp_obj.when_created = g_info["created"]
                 if g_info.get("description"): grp_obj.description = g_info["description"]
                 if g_info.get("type"): grp_obj.group_type = g_info["type"]
+                grp_obj.source_type = "CSV_IMPORT"
+                grp_obj.source_ref = source_label
 
         # Felhasználók
         for u_key, u_info in curr_users.items():
@@ -371,6 +374,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     last_logon_date=u_info.get("last_logon"),
                     user_status=final_status,
                     ou_path=ou_val,
+                    source_type="CSV_IMPORT",
+                    source_ref=source_label,
                     when_created=u_info["created"] or ts,
                     when_changed=ts,
                     last_synced_at=ts
@@ -383,7 +388,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
                         change_type="USER_CREATED", details=f"Új fiók azonosítva ({u_info['name']})",
-                        raw_diff=None
+                        raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
                     ))
                     snap_events += 1
             else:
@@ -397,6 +402,8 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                 if u_info.get("last_logon"): db_user.last_logon_date = u_info["last_logon"]
                 if final_status: db_user.user_status = final_status
                 if ou_val: db_user.ou_path = ou_val
+                db_user.source_type = "CSV_IMPORT"
+                db_user.source_ref = source_label
                 db_user.when_changed = ts
                 db_user.last_synced_at = ts
 
@@ -407,7 +414,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
                         change_type="USER_DISABLED", details="Fiók inaktiválva / letiltva",
-                        raw_diff=None
+                        raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
                     ))
                     snap_events += 1
                 elif not p_user["enabled"] and u_info["enabled"]:
@@ -415,7 +422,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
                         change_type="USER_ENABLED", details="Fiók újraaktiválva",
-                        raw_diff=None
+                        raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
                     ))
                     snap_events += 1
 
@@ -424,7 +431,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                         timestamp=ts, entity_type="USER", entity_name=u_info["sam"],
                         change_type="STATUS_CHANGED",
                         details=f"Besorolás változott: '{p_user['status']}' -> '{u_info['status']}'",
-                        raw_diff=None
+                        raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
                     ))
                     snap_events += 1
 
@@ -436,7 +443,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="MEMBERSHIP", entity_name=u_info["sam"],
                         change_type="ADDED_TO_GROUP", details=f"Hozzáadva: '{ag}'",
-                        raw_diff=None
+                        raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
                     ))
                     snap_events += 1
 
@@ -448,7 +455,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                     db.add(models.ADAuditLog(
                         timestamp=ts, entity_type="MEMBERSHIP", entity_name=u_info["sam"],
                         change_type="REMOVED_FROM_GROUP", details=f"Eltávolítva: '{rg}'",
-                        raw_diff=None
+                        raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
                     ))
                     snap_events += 1
             else:
@@ -462,7 +469,7 @@ def run_historical_replay(db, folder_path: str, progress_callback=None) -> dict:
                 timestamp=ts, entity_type="SYSTEM", entity_name="IMPORT",
                 change_type="BASELINE_ESTABLISHED",
                 details=f"Alapállapot: {len(curr_users)} fiók és {len(curr_groups)} csoport",
-                raw_diff=None
+                raw_diff=None, source_type="CSV_IMPORT", source_ref=source_label
             ))
             snap_events += 1
 

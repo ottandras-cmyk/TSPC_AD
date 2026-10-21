@@ -1,74 +1,61 @@
-import os
 import hmac
 import hashlib
 import time
-import ssl
-from ldap3 import Server, Connection, Tls, ALL, SIMPLE, NTLM
-from ldap_client import parse_ad_server
+import uuid
+from ldap3 import Server, Connection, ALL
 from config_manager import get_setting
 
-SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "tspc-ad-tracker-session-secret-2026")
-COOKIE_NAME = "ad_tracker_session"
-SESSION_DURATION_SECONDS = 86400  # 24 órás munkamenet
+SECRET_KEY = "ad-tracker-secret-key-change-in-production"
+COOKIE_NAME = "ad_session"
 
-def authenticate_ad_user(db, username: str, password: str):
-    """Felhasználó ellenőrzése az Active Directory-ban"""
-    raw_server = get_setting(db, "AD_SERVER")
-    if not raw_server:
-        return False, "Nincs konfigurálva AD szerver az adatbázisban!"
-
-    # Ha a felhasználó nem írt tartományt, automatikusan hozzáfűzzük a @tspc.hu-t
-    user_clean = username.strip()
-    if "@" not in user_clean and "\\" not in user_clean:
-        ad_principal = f"{user_clean}@tspc.hu"
-    else:
-        ad_principal = user_clean
-
-    try:
-        host, port, use_ssl = parse_ad_server(raw_server)
-        tls_config = Tls(validate=ssl.CERT_NONE) if use_ssl else None
-        server = Server(host=host, port=port, use_ssl=use_ssl, tls=tls_config, get_info=ALL, connect_timeout=5)
-        
-        auth_type = SIMPLE if "@" in ad_principal else NTLM
-        
-        # Próba csatlakozás a megadott adatokkal
-        conn = Connection(
-            server,
-            user=ad_principal,
-            password=password,
-            authentication=auth_type,
-            auto_bind=True
-        )
-        conn.unbind()
-        return True, ad_principal
-    except Exception as e:
-        return False, f"Sikertelen hitelesítés: hibás felhasználónév vagy jelszó! ({e})"
-
-def create_session_token(username: str) -> str:
-    """Biztonságos HMAC-aláírt token generálása"""
+def create_session_token(username: str, session_id: str = None) -> tuple[str, str]:
+    if not session_id:
+        session_id = str(uuid.uuid4())
     ts = str(int(time.time()))
-    payload = f"{username}:{ts}"
-    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{username}:{ts}:{sig}"
+    data = f"{username}:{session_id}:{ts}"
+    signature = hmac.new(SECRET_KEY.encode(), data.encode(), hashlib.sha256).hexdigest()
+    return f"{data}:{signature}", session_id
 
-def verify_session_token(token: str) -> str | None:
-    """Munkamenet érvényességének vizsgálata"""
+def verify_session_token(token: str):
     if not token:
-        return None
-    parts = token.split(":")
-    if len(parts) != 3:
-        return None
-    user, ts_str, sig = parts
+        return None, None
     try:
-        ts = int(ts_str)
-    except ValueError:
-        return None
+        parts = token.split(":")
+        if len(parts) == 4:
+            username, session_id, ts, sig = parts
+            data = f"{username}:{session_id}:{ts}"
+            expected_sig = hmac.new(SECRET_KEY.encode(), data.encode(), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(sig, expected_sig):
+                if time.time() - int(ts) < 86400 * 7:
+                    return username, session_id
+        elif len(parts) == 3:
+            username, ts, sig = parts
+            data = f"{username}:{ts}"
+            expected_sig = hmac.new(SECRET_KEY.encode(), data.encode(), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(sig, expected_sig):
+                return username, f"legacy_{username}"
+    except Exception:
+        pass
+    return None, None
 
-    # Időkorlát ellenőrzése
-    if time.time() - ts > SESSION_DURATION_SECONDS:
-        return None
-
-    expected_sig = hmac.new(SECRET_KEY.encode(), f"{user}:{ts_str}".encode(), hashlib.sha256).hexdigest()
-    if hmac.compare_digest(sig, expected_sig):
-        return user
-    return None
+def authenticate_ad_user(db, username: str, password: str) -> tuple[bool, str]:
+    server_addr = get_setting(db, "AD_SERVER")
+    search_base = get_setting(db, "AD_SEARCH_BASE")
+    if not server_addr or not search_base:
+        return False, "Nincs konfigurálva AD szerver!"
+    if not password:
+        return False, "Üres jelszó nem engedélyezett!"
+    
+    clean_user = username.strip()
+    if "@" not in clean_user and "\\" not in clean_user:
+        user_dn_try = f"{clean_user}@tspc.hu"
+    else:
+        user_dn_try = clean_user
+        
+    try:
+        server = Server(server_addr, get_info=ALL)
+        conn = Connection(server, user=user_dn_try, password=password, auto_bind=True)
+        conn.unbind()
+        return True, clean_user
+    except Exception as e:
+        return False, str(e)
