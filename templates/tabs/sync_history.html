@@ -1,0 +1,34 @@
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:15px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <h3 style="margin:0;">Active Directory Szinkronizálási Eseménynapló</h3>
+        <span id="syncStatusIndicator" style="font-size:12px; padding:4px 10px; border-radius:12px; background:#f1f5f9; color:#64748b; font-weight:bold;">
+            Állapot ellenőrzése...
+        </span>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <button class="btn" style="background:#0284c7; padding:7px 14px; font-size:12px;" onclick="loadSyncHistory()">
+            🔄 Frissítés
+        </button>
+        <button class="btn" style="background:#16a34a; padding:7px 14px; font-size:12px;" onclick="triggerManualSync()">
+            ⚡ Azonnali AD Szinkronizálás Indítása
+        </button>
+    </div>
+</div>
+
+<div class="card-box" style="background:white; padding:10px 15px;">
+    <table>
+        <thead>
+            <tr>
+                <th>Indítás Időpontja</th>
+                <th>Befejezés Időpontja</th>
+                <th>Időtartam</th>
+                <th>Kiváltó ok</th>
+                <th>Státusz</th>
+                <th>Észlelt Változások</th>
+            </tr>
+        </thead>
+        <tbody id="syncHistoryBody">
+            <tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">Szinkronizálási napló betöltése...</td></tr>
+        </tbody>
+    </table>
+</div>

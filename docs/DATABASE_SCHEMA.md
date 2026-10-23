@@ -1,87 +1,142 @@
-# AD Tracker - Adatbázis Séma Dokumentáció
-Generálva: 2026-10-21 18:17:33 UTC | Alkalmazás verzió: v1.04
+# AD Tracker - Adatbázis Séma és Modell Dokumentáció (v1.06)
+*Automatikusan generálva: 2026-10-23 06:38:23 UTC*
 
-## Feltárt Adatbázis Táblák és Mezők
+A rendszer PostgreSQL relációs adatbázist használ SQLAlchemy ORM modellekkel.
 
-### Tábla: `ad_audit_log`
-- **Elsődleges kulcs(ok):** id
-| Mező neve | Típus | Nullable |
-| :--- | :--- | :--- |
-| `id` | `BIGINT` | False |
-| `timestamp` | `TIMESTAMP` | True |
-| `entity_type` | `VARCHAR(50)` | False |
-| `entity_name` | `VARCHAR(255)` | False |
-| `change_type` | `VARCHAR(50)` | False |
-| `details` | `TEXT` | True |
-| `raw_diff` | `TEXT` | True |
+## Tábla: `ad_audit_log` (ORM Modell: `ADAuditLog`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | Igen | Nem |
+| `timestamp` | `DATETIME` | Nem | Igen |
+| `entity_type` | `VARCHAR(50)` | Nem | Nem |
+| `entity_name` | `VARCHAR(255)` | Nem | Nem |
+| `change_type` | `VARCHAR(50)` | Nem | Nem |
+| `details` | `TEXT` | Nem | Igen |
+| `raw_diff` | `TEXT` | Nem | Igen |
+| `source_type` | `VARCHAR(50)` | Nem | Igen |
+| `source_ref` | `VARCHAR(255)` | Nem | Igen |
 
-### Tábla: `ad_group_members`
-- **Elsődleges kulcs(ok):** user_guid, group_guid
-- **Idegen kulcsok:** ['group_guid'] -> ad_groups.['object_guid'], ['user_guid'] -> ad_users.['object_guid']
-| Mező neve | Típus | Nullable |
-| :--- | :--- | :--- |
-| `user_guid` | `UUID` | False |
-| `group_guid` | `UUID` | False |
-| `assigned_at` | `TIMESTAMP` | True |
+## Tábla: `ad_groups` (ORM Modell: `ADGroup`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `object_guid` | `UUID` | Igen | Nem |
+| `sam_account_name` | `VARCHAR(255)` | Nem | Nem |
+| `distinguished_name` | `TEXT` | Nem | Igen |
+| `description` | `TEXT` | Nem | Igen |
+| `group_type` | `VARCHAR(100)` | Nem | Igen |
+| `object_sid` | `VARCHAR(255)` | Nem | Igen |
+| `source_type` | `VARCHAR(50)` | Nem | Igen |
+| `source_ref` | `VARCHAR(255)` | Nem | Igen |
+| `when_created` | `DATETIME` | Nem | Igen |
+| `when_changed` | `DATETIME` | Nem | Igen |
+| `last_synced_at` | `DATETIME` | Nem | Igen |
 
-### Tábla: `ad_users`
-- **Elsődleges kulcs(ok):** object_guid
-| Mező neve | Típus | Nullable |
-| :--- | :--- | :--- |
-| `object_guid` | `UUID` | False |
-| `sam_account_name` | `VARCHAR(255)` | False |
-| `display_name` | `VARCHAR(255)` | True |
-| `mail` | `VARCHAR(255)` | True |
-| `is_enabled` | `BOOLEAN` | True |
-| `distinguished_name` | `TEXT` | True |
-| `last_synced_at` | `TIMESTAMP` | True |
-| `telephone_number` | `VARCHAR(255)` | True |
-| `object_sid` | `VARCHAR(100)` | True |
-| `when_created` | `TIMESTAMP` | True |
-| `when_changed` | `TIMESTAMP` | True |
-| `first_name` | `VARCHAR(255)` | True |
-| `last_name` | `VARCHAR(255)` | True |
-| `description` | `TEXT` | True |
-| `office` | `VARCHAR(255)` | True |
-| `title` | `VARCHAR(255)` | True |
-| `department` | `VARCHAR(255)` | True |
-| `company` | `VARCHAR(255)` | True |
-| `mobile` | `VARCHAR(255)` | True |
-| `last_logon_date` | `TIMESTAMP` | True |
-| `user_status` | `VARCHAR(100)` | True |
-| `ou_path` | `TEXT` | True |
+## Tábla: `ad_users` (ORM Modell: `ADUser`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `object_guid` | `UUID` | Igen | Nem |
+| `sam_account_name` | `VARCHAR(255)` | Nem | Nem |
+| `display_name` | `VARCHAR(255)` | Nem | Igen |
+| `mail` | `VARCHAR(255)` | Nem | Igen |
+| `is_enabled` | `BOOLEAN` | Nem | Igen |
+| `distinguished_name` | `TEXT` | Nem | Igen |
+| `first_name` | `VARCHAR(255)` | Nem | Igen |
+| `last_name` | `VARCHAR(255)` | Nem | Igen |
+| `description` | `TEXT` | Nem | Igen |
+| `office` | `VARCHAR(255)` | Nem | Igen |
+| `title` | `VARCHAR(255)` | Nem | Igen |
+| `department` | `VARCHAR(255)` | Nem | Igen |
+| `company` | `VARCHAR(255)` | Nem | Igen |
+| `telephone_number` | `VARCHAR(100)` | Nem | Igen |
+| `mobile` | `VARCHAR(100)` | Nem | Igen |
+| `object_sid` | `VARCHAR(255)` | Nem | Igen |
+| `last_logon_date` | `DATETIME` | Nem | Igen |
+| `user_status` | `VARCHAR(100)` | Nem | Igen |
+| `ou_path` | `TEXT` | Nem | Igen |
+| `source_type` | `VARCHAR(50)` | Nem | Igen |
+| `source_ref` | `VARCHAR(255)` | Nem | Igen |
+| `when_created` | `DATETIME` | Nem | Igen |
+| `when_changed` | `DATETIME` | Nem | Igen |
+| `last_synced_at` | `DATETIME` | Nem | Igen |
 
-### Tábla: `ad_groups`
-- **Elsődleges kulcs(ok):** object_guid
-| Mező neve | Típus | Nullable |
-| :--- | :--- | :--- |
-| `object_guid` | `UUID` | False |
-| `sam_account_name` | `VARCHAR(255)` | False |
-| `distinguished_name` | `TEXT` | False |
-| `description` | `TEXT` | True |
-| `last_synced_at` | `TIMESTAMP` | True |
-| `group_type` | `VARCHAR(50)` | True |
-| `object_sid` | `VARCHAR(100)` | True |
-| `when_created` | `TIMESTAMP` | True |
-| `when_changed` | `TIMESTAMP` | True |
+## Tábla: `active_web_sessions` (ORM Modell: `ActiveSession`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `session_id` | `VARCHAR(100)` | Igen | Nem |
+| `username` | `VARCHAR(255)` | Nem | Nem |
+| `login_time` | `DATETIME` | Nem | Igen |
+| `last_activity` | `DATETIME` | Nem | Igen |
+| `client_ip` | `VARCHAR(100)` | Nem | Igen |
+| `browser` | `VARCHAR(100)` | Nem | Igen |
+| `os_name` | `VARCHAR(100)` | Nem | Igen |
+| `device_type` | `VARCHAR(50)` | Nem | Igen |
+| `location` | `VARCHAR(255)` | Nem | Igen |
+| `user_agent` | `TEXT` | Nem | Igen |
 
-### Tábla: `app_settings`
-- **Elsődleges kulcs(ok):** setting_key
-| Mező neve | Típus | Nullable |
-| :--- | :--- | :--- |
-| `setting_key` | `VARCHAR(50)` | False |
-| `setting_value` | `TEXT` | True |
-| `description` | `VARCHAR(255)` | True |
+## Tábla: `host_ip_history` (ORM Modell: `HostIPLog`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | Igen | Nem |
+| `timestamp` | `DATETIME` | Nem | Igen |
+| `ip_address` | `VARCHAR(100)` | Nem | Nem |
+| `hostname` | `VARCHAR(255)` | Nem | Igen |
+| `details` | `TEXT` | Nem | Igen |
 
-### Tábla: `sync_history`
-- **Elsődleges kulcs(ok):** id
-| Mező neve | Típus | Nullable |
-| :--- | :--- | :--- |
-| `id` | `BIGINT` | False |
-| `started_at` | `TIMESTAMP` | True |
-| `ended_at` | `TIMESTAMP` | True |
-| `duration_seconds` | `BIGINT` | True |
-| `trigger_type` | `VARCHAR(50)` | True |
-| `status` | `VARCHAR(50)` | True |
-| `changes_detected` | `BIGINT` | True |
-| `error_message` | `TEXT` | True |
+## Tábla: `sync_history` (ORM Modell: `SyncHistory`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | Igen | Nem |
+| `started_at` | `DATETIME` | Nem | Igen |
+| `ended_at` | `DATETIME` | Nem | Igen |
+| `duration_seconds` | `INTEGER` | Nem | Igen |
+| `trigger_type` | `VARCHAR(50)` | Nem | Igen |
+| `status` | `VARCHAR(50)` | Nem | Igen |
+| `changes_detected` | `INTEGER` | Nem | Igen |
+| `error_message` | `TEXT` | Nem | Igen |
+
+## Tábla: `app_settings` (ORM Modell: `SystemSetting`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `setting_key` | `VARCHAR(100)` | Igen | Nem |
+| `setting_value` | `TEXT` | Nem | Nem |
+| `description` | `VARCHAR(255)` | Nem | Igen |
+
+## Tábla: `system_telemetry` (ORM Modell: `SystemTelemetry`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | Igen | Nem |
+| `timestamp` | `DATETIME` | Nem | Igen |
+| `cpu_percent` | `FLOAT` | Nem | Igen |
+| `cpu_temp_c` | `FLOAT` | Nem | Igen |
+| `ram_total_mb` | `FLOAT` | Nem | Igen |
+| `ram_used_mb` | `FLOAT` | Nem | Igen |
+| `ram_percent` | `FLOAT` | Nem | Igen |
+| `disk_total_gb` | `FLOAT` | Nem | Igen |
+| `disk_used_gb` | `FLOAT` | Nem | Igen |
+| `disk_free_gb` | `FLOAT` | Nem | Igen |
+| `db_size_mb` | `FLOAT` | Nem | Igen |
+| `gpu_name` | `VARCHAR(100)` | Nem | Igen |
+| `gpu_util_percent` | `FLOAT` | Nem | Igen |
+| `gpu_mem_used_mb` | `FLOAT` | Nem | Igen |
+| `gpu_mem_total_mb` | `FLOAT` | Nem | Igen |
+| `gpu_temp_c` | `FLOAT` | Nem | Igen |
+| `gpu_power_w` | `FLOAT` | Nem | Igen |
+| `llm_tokens_prompt` | `INTEGER` | Nem | Igen |
+| `llm_tokens_eval` | `INTEGER` | Nem | Igen |
+| `llm_tokens_total` | `INTEGER` | Nem | Igen |
+
+## Tábla: `web_access_log` (ORM Modell: `WebAccessLog`)
+| Oszlop | Típus | Elsődleges kulcs | Nullable |
+| :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | Igen | Nem |
+| `timestamp` | `DATETIME` | Nem | Igen |
+| `username` | `VARCHAR(255)` | Nem | Nem |
+| `client_ip` | `VARCHAR(100)` | Nem | Nem |
+| `browser` | `VARCHAR(100)` | Nem | Igen |
+| `os_name` | `VARCHAR(100)` | Nem | Igen |
+| `device_type` | `VARCHAR(50)` | Nem | Igen |
+| `location` | `VARCHAR(255)` | Nem | Igen |
+| `user_agent` | `TEXT` | Nem | Igen |
+| `action` | `VARCHAR(100)` | Nem | Nem |
+| `details` | `TEXT` | Nem | Igen |
+| `status` | `VARCHAR(50)` | Nem | Igen |

@@ -1,0 +1,106 @@
+<div id="dayDetailModal" class="modal">
+    <div class="modal-content" style="max-width:1150px;">
+        <span class="close" onclick="closeAllModals()">&times;</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:10px; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+            <h2 style="margin:0;">📅 <span id="ddm_date">2026-10-21</span> — Részletes Események (<span id="ddm_total_title" style="color:#0284c7;">-</span>)</h2>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="ddm_search" placeholder="Gyorskeresés bárhol..." style="width:240px; margin:0;" onkeyup="filterDayModalEvents()">
+                <button class="btn" style="background:#64748b; padding:6px 12px; font-size:12px; white-space:nowrap;" onclick="resetDayModalFilters()">🔄 Szűrők törlése</button>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="btn_ddm_all" class="btn" onclick="setDayModalFilterType('ALL')">Mind (-)</button>
+                <button id="btn_ddm_add" class="btn" onclick="setDayModalFilterType('ADDED')">➕ Csak Hozzáadások (-)</button>
+                <button id="btn_ddm_rem" class="btn" onclick="setDayModalFilterType('REMOVED')">➖ Csak Elvételek (-)</button>
+                <button id="btn_ddm_life" class="btn" onclick="setDayModalFilterType('LIFECYCLE')">👤 Fiók / Státusz (-)</button>
+            </div>
+            <div style="font-size:12.5px; color:#64748b; font-weight:bold;">
+                Megjelenítve: <span id="ddm_visible_count" style="color:#0284c7;">-</span>
+            </div>
+        </div>
+
+        <div class="scroll-box" style="max-height:480px; margin-top:5px;">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="sortable-th" onclick="sortDayModal('timestamp')">Időpont <span id="sort_icon_timestamp" class="sort-icon">▼</span></th>
+                        <th class="sortable-th" onclick="sortDayModal('entity_name')">Érintett Felhasználó <span id="sort_icon_entity_name" class="sort-icon">↕</span></th>
+                        <th class="sortable-th" onclick="sortDayModal('change_type')">Művelet <span id="sort_icon_change_type" class="sort-icon">↕</span></th>
+                        <th class="sortable-th" onclick="sortDayModal('group_name')">Érintett Csoport <span id="sort_icon_group_name" class="sort-icon">↕</span></th>
+                        <th class="sortable-th" onclick="sortDayModal('details')">Részletek <span id="sort_icon_details" class="sort-icon">↕</span></th>
+                        <th class="sortable-th" onclick="sortDayModal('source_ref')">Forrás <span id="sort_icon_source_ref" class="sort-icon">↕</span></th>
+                    </tr>
+                    <tr style="background:#f1f5f9;">
+                        <th style="padding:4px;"><input type="text" id="col_filter_time" class="col-filter-input" placeholder="Szűrés időre..." onkeyup="filterDayModalEvents()"></th>
+                        <th style="padding:4px;"><input type="text" id="col_filter_user" class="col-filter-input" placeholder="Szűrés névre..." onkeyup="filterDayModalEvents()"></th>
+                        <th style="padding:4px;"><select id="col_filter_action" class="col-filter-select" onchange="filterDayModalEvents()"><option value="">Mind (Művelet)</option></select></th>
+                        <th style="padding:4px;"><select id="col_filter_group" class="col-filter-select" onchange="filterDayModalEvents()"><option value="">Mind (Csoport)</option></select></th>
+                        <th style="padding:4px;"><input type="text" id="col_filter_details" class="col-filter-input" placeholder="Szűrés részletre..." onkeyup="filterDayModalEvents()"></th>
+                        <th style="padding:4px;"><select id="col_filter_source" class="col-filter-select" onchange="filterDayModalEvents()"><option value="">Mind (Forrás)</option></select></th>
+                    </tr>
+                </thead>
+                <tbody id="ddm_events_body">
+                    <tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">Betöltés...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="userModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeAllModals()">&times;</span>
+        <h2 style="margin-top:0;"><span id="m-name"></span> <span id="m-status" style="margin-left:10px;"></span></h2>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+            <div class="card-box">
+                <h4>Személyes és Fiók Adatok</h4>
+                <div class="data-row"><strong>Azonosító:</strong><span id="m-sam"></span></div>
+                <div class="data-row"><strong>Vezetéknév:</strong><span id="m-lname"></span></div>
+                <div class="data-row"><strong>Keresztnév:</strong><span id="m-fname"></span></div>
+                <div class="data-row"><strong>Email:</strong><span id="m-mail"></span></div>
+                <div class="data-row"><strong>Telefon:</strong><span id="m-phone"></span></div>
+                <div class="data-row"><strong>Mobil:</strong><span id="m-mobile"></span></div>
+                <div class="data-row"><strong>Leírás:</strong><span id="m-desc"></span></div>
+            </div>
+            <div class="card-box">
+                <h4>Szervezet és Eredet</h4>
+                <div class="data-row"><strong>Besorolás:</strong><span id="m-userstatus" style="font-weight:bold; color:#0284c7;"></span></div>
+                <div class="data-row"><strong>Adatforrás / Eredet:</strong><span id="m-sourceref" style="font-family:monospace; font-weight:bold; color:#0369a1;"></span></div>
+                <div class="data-row"><strong>Utolsó belépés:</strong><span id="m-lastlogon"></span></div>
+                <div class="data-row"><strong>OU Útvonal:</strong><span id="m-ou" style="font-size:12px;"></span></div>
+                <div class="data-row"><strong>Beosztás / Titulus:</strong><span id="m-title"></span></div>
+                <div class="data-row"><strong>Részleg:</strong><span id="m-dept"></span></div>
+                <div class="data-row"><strong>Cég:</strong><span id="m-company"></span></div>
+                <div class="data-row"><strong>Iroda:</strong><span id="m-office"></span></div>
+            </div>
+            <div class="card-box" style="grid-column: span 2;">
+                <h4>Aktuális Csoporttagságok:</h4>
+                <div id="m-groups" style="line-height:2;"></div>
+            </div>
+            <div class="card-box" style="grid-column: span 2;">
+                <h4>Jogosultság- és Fiókváltozások Idővonala:</h4>
+                <div id="m-history" style="max-height:200px; overflow-y:auto; background:white; border:1px solid #cbd5e1; border-radius:6px; padding:5px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="groupModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeAllModals()">&times;</span>
+        <h2 style="margin-top:0;">👥 <span id="g-name"></span></h2>
+        <div class="card-box">
+            <div class="data-row"><strong>Típus:</strong><span id="g-type" style="font-weight:bold; color:#0369a1;"></span></div>
+            <div class="data-row"><strong>Leírás:</strong><span id="g-desc"></span></div>
+            <div class="data-row"><strong>Tagok száma:</strong><span id="g-count" style="font-weight:bold;"></span></div>
+            <div class="data-row"><strong>Létrehozva:</strong><span id="g-created"></span></div>
+            <div class="data-row"><strong>SID:</strong><span id="g-sid" style="font-size:11px;"></span></div>
+        </div>
+        <div class="card-box">
+            <h4>Csoport Tagjai (Kattintson egy tagra):</h4>
+            <div id="g-members" style="line-height:2; max-height:300px; overflow-y:auto;"></div>
+        </div>
+    </div>
+</div>

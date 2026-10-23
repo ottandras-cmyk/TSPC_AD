@@ -1,0 +1,55 @@
+<!-- Nézetváltó kapcsoló és keresősáv -->
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+    <div style="display:flex; gap:8px;">
+        <button id="btnSubUsers" class="btn" style="background:#0284c7; padding:7px 14px;" onclick="switchUsersSubTab('users')">
+            👤 Felhasználók (<span id="userCountBadge">0</span>)
+        </button>
+        <button id="btnSubGroups" class="btn" style="background:#f1f5f9; color:#334155; padding:7px 14px;" onclick="switchUsersSubTab('groups')">
+            👥 AD Csoportok (<span id="groupCountBadge">0</span>)
+        </button>
+    </div>
+    <span id="userCountLabel" style="font-size:12.5px; color:#64748b; font-weight:bold;">Betöltés...</span>
+</div>
+
+<div style="margin-bottom:12px;">
+    <input type="text" id="userSearchBox" placeholder="Gyorskeresés név, fiók, beosztás, email, OU vagy csoport alapján..." onkeyup="filterUsersAndGroups()">
+</div>
+
+<!-- 1. Felhasználók táblázat -->
+<div id="viewUsersBox">
+    <table>
+        <thead>
+            <tr>
+                <th>Név / Forráscímke</th>
+                <th>Azonosító (SAM)</th>
+                <th>Email</th>
+                <th>Besorolás</th>
+                <th>Titulus / Beosztás</th>
+                <th>Utolsó belépés</th>
+                <th style="text-align:right;">Művelet</th>
+            </tr>
+        </thead>
+        <tbody id="usersTableBody">
+            <tr><td colspan="7" style="text-align:center; padding:15px; color:#94a3b8;">Felhasználók betöltése...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 2. Csoportok táblázat (alapértelmezetten rejtve) -->
+<div id="viewGroupsBox" style="display:none;">
+    <table>
+        <thead>
+            <tr>
+                <th>Csoport Neve</th>
+                <th>Típus</th>
+                <th>Leírás</th>
+                <th>Tagok Száma</th>
+                <th>Létrehozva</th>
+                <th style="text-align:right;">Művelet</th>
+            </tr>
+        </thead>
+        <tbody id="groupsTableBody">
+            <tr><td colspan="6" style="text-align:center; padding:15px; color:#94a3b8;">Csoportok betöltése...</td></tr>
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>AD Tracker & Rendszerközpont</title>
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2 style="margin:0;">AD Tracker & Rendszerközpont</h2>
+            <span>Bejelentkezve: <b>{{ current_user }}</b> <a href="/logout" class="btn" style="background:#ef4444; margin-left:10px;">Kilépés</a></span>
+        </div>
+        
+        <div class="tabs">
+            <div id="tab-dashboard" class="tab active" onclick="switchTab('dashboard')">Jogosultság Változások</div>
+            <div id="tab-users" class="tab" onclick="switchTab('users')">Felhasználók és Csoportok</div>
+            <div id="tab-ad-changes" class="tab" onclick="switchTab('ad-changes')">📅 AD Változás Elemző</div>
+            <div id="tab-telemetry" class="tab" onclick="switchTab('telemetry')">📊 Telemetria & Rendszerállapot</div>
+            <div id="tab-sync-history" class="tab" onclick="switchTab('sync-history')">Szinkronizálási Napló</div>
+            <div id="tab-ai" class="tab" onclick="switchTab('ai')">AI Elemző & Asszisztens</div>
+            <div id="tab-history-import" class="tab" onclick="switchTab('history-import')">Történeti Időgép (CSV Import)</div>
+            <div id="tab-backups" class="tab" onclick="switchTab('backups')">Mentések & Verziók</div>
+            <div id="tab-settings" class="tab" onclick="switchTab('settings')">Beállítások</div>
+        </div>
+
+        <div id="content-dashboard" class="content active">{% include 'tabs/dashboard.html' %}</div>
+        <div id="content-users" class="content">{% include 'tabs/users.html' %}</div>
+        <div id="content-ad-changes" class="content">{% include 'tabs/ad_changes.html' %}</div>
+        <div id="content-telemetry" class="content">{% include 'tabs/telemetry.html' %}</div>
+        <div id="content-sync-history" class="content">{% include 'tabs/sync_history.html' %}</div>
+        <div id="content-ai" class="content">{% include 'tabs/ai.html' %}</div>
+        <div id="content-history-import" class="content">{% include 'tabs/history_import.html' %}</div>
+        <div id="content-backups" class="content">{% include 'tabs/backups.html' %}</div>
+        <div id="content-settings" class="content">{% include 'tabs/settings.html' %}</div>
+    </div>
+
+    {% include 'tabs/modals.html' %}
+    <script src="/static/js/ui-core.js?v=3.5"></script>
+</body>
+</html>

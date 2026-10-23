@@ -1,4 +1,5 @@
 ad_analytics
+app
 apscheduler>=3.10.4
 fastapi>=0.110.0
 hashlib
@@ -8,6 +9,7 @@ ldap3>=2.9.1
 main
 psycopg2-binary>=2.9.9
 python-multipart>=0.0.9
+routers
 socket
 sqlalchemy>=2.0.28
 ssl

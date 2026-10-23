@@ -1,0 +1,60 @@
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
+    <!-- 1. Teljes Rendszermentés (Egyben) -->
+    <div class="card-box" style="border-left: 4px solid #16a34a; background:#ffffff;">
+        <h4 style="margin-top:0; color:#15803d;">📦 Teljes Rendszermentés (Egyben, Visszaállítható .zip)</h4>
+        <small style="color:#64748b; display:block; margin-bottom:10px;">
+            Mindent tartalmaz egyetlen archívumban: teljes kódbázis, PostgreSQL adatbázis SQL dump, konfiguráció és dokumentáció.
+        </small>
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="backup_comment" placeholder="Mentés megjegyzése (opcionális)..." style="margin:0;">
+            <button id="createBackupBtn" class="btn" style="background:#16a34a; white-space:nowrap;" onclick="createNewBackup()">
+                📦 Teljes Mentés Készítése
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. Szeparált Elemek Azonnali Exportja & Letöltése (Külön-külön) -->
+    <div class="card-box" style="border-left: 4px solid #0284c7; background:#ffffff;">
+        <h4 style="margin-top:0; color:#0369a1;">📥 Szeparált Elemek Letöltése (Külön-külön)</h4>
+        <small style="color:#64748b; display:block; margin-bottom:10px;">
+            Töltse le a kívánt komponenst közvetlenül, önálló formátumban:
+        </small>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <a class="btn" style="background:#0284c7; text-align:center; padding:8px 10px; font-size:12px;" href="/api/backups/export/code">
+                💻 Kódbázis (.zip)
+            </a>
+            <a class="btn" style="background:#0284c7; text-align:center; padding:8px 10px; font-size:12px;" href="/api/backups/export/docs">
+                📚 Dokumentáció & Sémák (.zip)
+            </a>
+            <a class="btn" style="background:#475569; text-align:center; padding:8px 10px; font-size:12px;" href="/api/backups/export/config">
+                ⚙️ Konfiguráció (.json)
+            </a>
+            <a class="btn" style="background:#d97706; text-align:center; padding:8px 10px; font-size:12px;" href="/api/backups/export/database">
+                💾 Adatbázis Dump (.sql)
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- 3. Korábban Elkészült Teljes Mentések Táblázata -->
+<div class="card-box" style="background:white;">
+    <h4 style="margin-top:0;">📋 Korábban Elkészült Rendszermentések Archívuma</h4>
+    <div class="scroll-box" style="max-height:350px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Létrehozva</th>
+                    <th>Verzió</th>
+                    <th>Fájlnév</th>
+                    <th>Méret</th>
+                    <th>Megjegyzés</th>
+                    <th>Készítette</th>
+                    <th style="text-align:right;">Műveletek</th>
+                </tr>
+            </thead>
+            <tbody id="backupsTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:15px; color:#94a3b8;">Mentések betöltése...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -1,0 +1,7 @@
+<div style="margin-bottom: 15px; overflow: hidden;">
+    <button class="btn" style="background:#16a34a; float:right;" onclick="fetch('/api/sync', {method:'POST'}); alert('Szinkronizáció elindítva!');">Azonnali AD Letöltés</button>
+</div>
+<table>
+    <thead><tr><th>Időpont</th><th>Érintett Fiók</th><th>Esemény</th><th>Részletek</th></tr></thead>
+    <tbody>{{ rows|safe }}</tbody>
+</table>

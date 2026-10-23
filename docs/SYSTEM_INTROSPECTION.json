@@ -792,10 +792,6 @@
       "classes": [],
       "functions": [
         {
-          "name": "execute_sync_with_log",
-          "decorators": []
-        },
-        {
           "name": "scheduled_sync_job",
           "decorators": []
         },
@@ -807,6 +803,12 @@
           "name": "lifespan",
           "decorators": [
             "@asynccontextmanager"
+          ]
+        },
+        {
+          "name": "serve_static",
+          "decorators": [
+            "@app.get"
           ]
         },
         {
@@ -836,200 +838,8 @@
           ]
         },
         {
-          "name": "get_sync_status",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "get_sync_history",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "get_all_users",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "get_user_history",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "get_all_groups",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "trigger_sync_manual",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "api_ad_analytics_day_events",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_ad_analytics_summary",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_ad_analytics_ask",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "api_telemetry_live",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_telemetry_sessions",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_telemetry_history",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_telemetry_web_logs",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_telemetry_host_ip_history",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_telemetry_collect",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "api_history_upload_files",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "api_history_scan",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "api_history_backfill",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "async_import_worker",
+          "name": "render_modular_template",
           "decorators": []
-        },
-        {
-          "name": "api_history_import",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "api_history_progress",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "get_backups_list",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "create_backup_endpoint",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "restore_backup_endpoint",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "download_backup_endpoint",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "delete_backup_endpoint",
-          "decorators": [
-            "@app.delete"
-          ]
-        },
-        {
-          "name": "api_gh_get_version",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_gh_test",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "api_gh_history",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "api_gh_push",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "get_ai_models",
-          "decorators": [
-            "@app.get"
-          ]
-        },
-        {
-          "name": "ask_ai_endpoint",
-          "decorators": [
-            "@app.post"
-          ]
-        },
-        {
-          "name": "save_settings",
-          "decorators": [
-            "@app.post"
-          ]
         },
         {
           "name": "index_page",
@@ -1042,7 +852,7 @@
           "decorators": []
         },
         {
-          "name": "on_progress",
+          "name": "replace_include",
           "decorators": []
         }
       ]
@@ -1266,6 +1076,295 @@
           "decorators": []
         }
       ]
+    },
+    "app/routers/__init__.py": {
+      "classes": [],
+      "functions": []
+    },
+    "app/routers/github.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "api_gh_get_version",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_gh_test",
+          "decorators": [
+            "@router.post"
+          ]
+        },
+        {
+          "name": "api_gh_history",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_gh_push",
+          "decorators": [
+            "@router.post"
+          ]
+        }
+      ]
+    },
+    "app/routers/ai.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "get_ai_models",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "ask_ai_endpoint",
+          "decorators": [
+            "@router.post"
+          ]
+        }
+      ]
+    },
+    "app/routers/sync.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "execute_sync_with_log",
+          "decorators": []
+        },
+        {
+          "name": "get_sync_status",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "get_sync_history",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "trigger_sync_manual",
+          "decorators": [
+            "@router.post"
+          ]
+        }
+      ]
+    },
+    "app/routers/history.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "async_import_worker",
+          "decorators": []
+        },
+        {
+          "name": "api_history_upload_files",
+          "decorators": [
+            "@router.post"
+          ]
+        },
+        {
+          "name": "api_history_scan",
+          "decorators": [
+            "@router.post"
+          ]
+        },
+        {
+          "name": "api_history_backfill",
+          "decorators": [
+            "@router.post"
+          ]
+        },
+        {
+          "name": "api_history_import",
+          "decorators": [
+            "@router.post"
+          ]
+        },
+        {
+          "name": "api_history_progress",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "on_progress",
+          "decorators": []
+        }
+      ]
+    },
+    "app/routers/settings.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "save_settings",
+          "decorators": [
+            "@router.post"
+          ]
+        }
+      ]
+    },
+    "app/routers/backups.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "get_backups_list",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "create_backup_endpoint",
+          "decorators": [
+            "@router.post"
+          ]
+        },
+        {
+          "name": "restore_backup_endpoint",
+          "decorators": [
+            "@router.post"
+          ]
+        },
+        {
+          "name": "download_backup_endpoint",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "delete_backup_endpoint",
+          "decorators": [
+            "@router.delete"
+          ]
+        }
+      ]
+    },
+    "app/routers/users.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "get_all_users",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "get_user_history",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "get_all_groups",
+          "decorators": [
+            "@router.get"
+          ]
+        }
+      ]
+    },
+    "app/routers/ad_analytics.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_user",
+          "decorators": []
+        },
+        {
+          "name": "api_ad_analytics_summary",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_ad_analytics_day_events",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_ad_analytics_ask",
+          "decorators": [
+            "@router.post"
+          ]
+        }
+      ]
+    },
+    "app/routers/telemetry.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_current_session",
+          "decorators": []
+        },
+        {
+          "name": "api_telemetry_live",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_telemetry_sessions",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_telemetry_history",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_telemetry_web_logs",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_telemetry_host_ip_history",
+          "decorators": [
+            "@router.get"
+          ]
+        },
+        {
+          "name": "api_telemetry_collect",
+          "decorators": [
+            "@router.post"
+          ]
+        }
+      ]
     }
   },
   "ldap_attributes": {
@@ -1306,31 +1405,38 @@
       "path": "/openapi.json",
       "name": "openapi",
       "methods": [
-        "HEAD",
-        "GET"
+        "GET",
+        "HEAD"
       ]
     },
     {
       "path": "/docs",
       "name": "swagger_ui_html",
       "methods": [
-        "HEAD",
-        "GET"
+        "GET",
+        "HEAD"
       ]
     },
     {
       "path": "/docs/oauth2-redirect",
       "name": "swagger_ui_redirect",
       "methods": [
-        "HEAD",
-        "GET"
+        "GET",
+        "HEAD"
       ]
     },
     {
       "path": "/redoc",
       "name": "redoc_html",
       "methods": [
-        "HEAD",
+        "GET",
+        "HEAD"
+      ]
+    },
+    {
+      "path": "/static/{file_path:path}",
+      "name": "serve_static",
+      "methods": [
         "GET"
       ]
     },
@@ -1356,230 +1462,6 @@
       ]
     },
     {
-      "path": "/api/sync-status",
-      "name": "get_sync_status",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/sync-history",
-      "name": "get_sync_history",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/users",
-      "name": "get_all_users",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/users/{sam}/history",
-      "name": "get_user_history",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/groups",
-      "name": "get_all_groups",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/sync",
-      "name": "trigger_sync_manual",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/ad-analytics/day-events",
-      "name": "api_ad_analytics_day_events",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/ad-analytics/summary",
-      "name": "api_ad_analytics_summary",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/ad-analytics/ask",
-      "name": "api_ad_analytics_ask",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/telemetry/live",
-      "name": "api_telemetry_live",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/telemetry/sessions",
-      "name": "api_telemetry_sessions",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/telemetry/history",
-      "name": "api_telemetry_history",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/telemetry/web-logs",
-      "name": "api_telemetry_web_logs",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/telemetry/host-ip-history",
-      "name": "api_telemetry_host_ip_history",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/telemetry/collect",
-      "name": "api_telemetry_collect",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/history/upload-files",
-      "name": "api_history_upload_files",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/history/scan",
-      "name": "api_history_scan",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/history/backfill",
-      "name": "api_history_backfill",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/history/import",
-      "name": "api_history_import",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/history/progress",
-      "name": "api_history_progress",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/backups",
-      "name": "get_backups_list",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/backups/create",
-      "name": "create_backup_endpoint",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/backups/restore",
-      "name": "restore_backup_endpoint",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/backups/download/{filename}",
-      "name": "download_backup_endpoint",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/backups/{filename}",
-      "name": "delete_backup_endpoint",
-      "methods": [
-        "DELETE"
-      ]
-    },
-    {
-      "path": "/api/github/version",
-      "name": "api_gh_get_version",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/github/test",
-      "name": "api_gh_test",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/github/history",
-      "name": "api_gh_history",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/github/push",
-      "name": "api_gh_push",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/ai/models",
-      "name": "get_ai_models",
-      "methods": [
-        "GET"
-      ]
-    },
-    {
-      "path": "/api/ai/ask",
-      "name": "ask_ai_endpoint",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
-      "path": "/api/settings",
-      "name": "save_settings",
-      "methods": [
-        "POST"
-      ]
-    },
-    {
       "path": "/",
       "name": "index_page",
       "methods": [
@@ -1592,13 +1474,13 @@
       "id": "telemetry_job",
       "name": "scheduled_telemetry_job",
       "trigger": "interval[0:15:00]",
-      "next_run_time": "2026-10-23 05:06:56.041609+00:00"
+      "next_run_time": "2026-10-23 05:31:54.076596+00:00"
     },
     {
       "id": "ad_sync_job",
       "name": "scheduled_sync_job",
       "trigger": "interval[1 day, 0:00:00]",
-      "next_run_time": "2026-10-23 18:06:56.041550+00:00"
+      "next_run_time": "2026-10-24 05:16:54.076538+00:00"
     }
   ],
   "environment": {
@@ -1639,10 +1521,6 @@
         "value": "main",
         "desc": ""
       },
-      "APP_VERSION": {
-        "value": "1.05",
-        "desc": ""
-      },
       "LLM_TOKENS_PROMPT": {
         "value": "***",
         "desc": ""
@@ -1653,6 +1531,10 @@
       },
       "LLM_TOKENS_TOTAL": {
         "value": "***",
+        "desc": ""
+      },
+      "APP_VERSION": {
+        "value": "1.06",
         "desc": ""
       }
     },

@@ -1,0 +1,117 @@
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+    <div>
+        <h3 style="margin:0 0 4px 0;">Szerver, GPU, Munkamenetek & Biztonsági Audit</h3>
+        <small style="color:#64748b;">15 percenként automatikus PostgreSQL rögzítés | Élő adatok 10 mp-enként frissülnek</small>
+    </div>
+    <button id="collectTelBtn" class="btn" onclick="triggerTelemetryCollect()">⚡ Azonnali Mérés Rögzítése</button>
+</div>
+
+<div style="display:grid; grid-template-columns: 1fr 1.3fr; gap:15px; margin-bottom:20px;">
+    <div class="telemetry-card" style="border-left: 4px solid #16a34a; background:#f0fdf4;">
+        <div class="title" style="color:#15803d;">👤 Jelenlegi Munkameneted (Aktuális Belépés)</div>
+        <div class="data-row"><strong>Bejelentkezve:</strong><b id="cur_sess_user" style="color:#0f172a;">-</b></div>
+        <div class="data-row"><strong>Munkamenet kezdete:</strong><span id="cur_sess_login">-</span></div>
+        <div class="data-row"><strong>Kliens IP & Hálózat:</strong><span id="cur_sess_ip">-</span></div>
+        <div class="data-row"><strong>Böngésző & Eszköz:</strong><span id="cur_sess_device">-</span></div>
+    </div>
+
+    <div class="telemetry-card" style="border-left: 4px solid #0284c7;">
+        <div class="title" style="color:#0369a1;">👥 Jelenleg Aktív Egyéb Munkamenetek (Ki van még belépve?)</div>
+        <div style="max-height:130px; overflow-y:auto; margin-top:6px;">
+            <table style="margin:0; font-size:12px;">
+                <thead>
+                    <tr><th>Felhasználó</th><th>Kliens IP</th><th>Gép / Böngésző</th><th>Belépve</th><th>Aktivitás</th></tr>
+                </thead>
+                <tbody id="otherSessionsBody">
+                    <tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:10px;">Ellenőrzés...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="telemetry-grid">
+    <div class="telemetry-card" style="border-left: 4px solid #0284c7;">
+        <div class="title">Gazdagép IP Címe (Host)</div>
+        <div class="value" id="tel_host_ip" style="font-size:22px; color:#0369a1;">-</div>
+        <div class="sub" id="tel_host_sub">-</div>
+        <div class="progress-bg"><div class="progress-bar" style="width:100%; background:#0284c7;"></div></div>
+    </div>
+    <div class="telemetry-card">
+        <div class="title">Processzor (CPU)</div>
+        <div class="value" id="tel_cpu_pct">- %</div>
+        <div class="sub" id="tel_cpu_sub">-</div>
+        <div class="progress-bg"><div id="tel_cpu_bar" class="progress-bar" style="width:0%;"></div></div>
+    </div>
+    <div class="telemetry-card">
+        <div class="title">Memória (RAM)</div>
+        <div class="value" id="tel_ram_val">- GB</div>
+        <div class="sub" id="tel_ram_sub">-</div>
+        <div class="progress-bg"><div id="tel_ram_bar" class="progress-bar" style="width:0%;"></div></div>
+    </div>
+    <div class="telemetry-card">
+        <div class="title">Tárhely & PostgreSQL DB</div>
+        <div class="value" id="tel_disk_val">- GB</div>
+        <div class="sub" id="tel_disk_sub">-</div>
+        <div class="progress-bg"><div id="tel_disk_bar" class="progress-bar" style="width:0%; background:#64748b;"></div></div>
+    </div>
+    <div class="telemetry-card" style="border-left: 4px solid #10b981;">
+        <div class="title">Videokártya (GPU)</div>
+        <div class="value" id="tel_gpu_val" style="color:#047857;">- %</div>
+        <div class="sub" id="tel_gpu_sub">-</div>
+        <div class="progress-bg"><div id="tel_gpu_bar" class="progress-bar" style="width:0%; background:#10b981;"></div></div>
+    </div>
+    <div class="telemetry-card">
+        <div class="title">Helyi LLM Tokenek</div>
+        <div class="value" id="tel_llm_val">0 db</div>
+        <div class="sub" id="tel_llm_sub">Ollama inferencia</div>
+        <div class="progress-bg"><div class="progress-bar" style="width:100%; background:#f59e0b;"></div></div>
+    </div>
+</div>
+
+<div class="chart-grid">
+    <div class="chart-container">
+        <h5>📈 CPU & GPU Terhelés (%) és Hőmérséklet (°C)</h5>
+        <div style="height:210px;"><canvas id="chartCpuGpu"></canvas></div>
+    </div>
+    <div class="chart-container">
+        <h5>📊 Memória (RAM) Használat (MB)</h5>
+        <div style="height:210px;"><canvas id="chartMemory"></canvas></div>
+    </div>
+    <div class="chart-container">
+        <h5>💾 Szabad Tárhely (GB) & PostgreSQL Adatbázis (MB)</h5>
+        <div style="height:210px;"><canvas id="chartStorage"></canvas></div>
+    </div>
+    <div class="chart-container">
+        <h5>🤖 Helyi LLM Összesített Tokenek</h5>
+        <div style="height:210px;"><canvas id="chartLlm"></canvas></div>
+    </div>
+</div>
+
+<div class="card-box">
+    <h4 style="margin-top:0;">🛡️ Webes Belépési és Tevékenységi Napló (Böngésző, OS, Kliens IP & Hálózat)</h4>
+    <div class="scroll-box">
+        <table>
+            <thead>
+                <tr><th>Időpont</th><th>Felhasználónév</th><th>Kliens IP & Hálózat</th><th>Böngésző, OS & Eszköz</th><th>Művelet</th><th>Részletek</th><th>Eredmény</th></tr>
+            </thead>
+            <tbody id="webAccessLogBody">
+                <tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:15px;">Betöltés...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card-box">
+    <h4 style="margin-top:0;">🌐 Gazdagép (Host) IP Cím & DHCP Változástörténet</h4>
+    <div class="scroll-box" style="max-height:160px;">
+        <table>
+            <thead>
+                <tr><th>Észlelés Időpontja</th><th>IP Cím</th><th>Gépnév</th><th>Részletek / Esemény</th></tr>
+            </thead>
+            <tbody id="hostIpHistoryBody">
+                <tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:15px;">Betöltés...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>

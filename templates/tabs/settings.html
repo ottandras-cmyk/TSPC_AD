@@ -1,0 +1,189 @@
+<div style="display:flex; gap:8px; margin-bottom:15px; border-bottom:1px solid #cbd5e1; padding-bottom:10px;">
+    <button id="btnSetTabConn" class="btn" style="background:#0284c7; padding:7px 15px;" onclick="switchSettingsSubTab('conn')">
+        🌐 Kapcsolatok & Integrációk
+    </button>
+    <button id="btnSetTabMaint" class="btn" style="background:#f1f5f9; color:#334155; padding:7px 15px;" onclick="switchSettingsSubTab('maint')">
+        🛠️ Adatbázis & Karbantartás
+    </button>
+    <button id="btnSetTabUi" class="btn" style="background:#f1f5f9; color:#334155; padding:7px 15px;" onclick="switchSettingsSubTab('ui')">
+        🎨 Megjelenítés & Rendszer
+    </button>
+</div>
+
+<!-- 1. AL-FÜL: KAPCSOLATOK & INTEGRÁCIÓK -->
+<div id="setBoxConn">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+        <!-- Active Directory -->
+        <div class="card-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h4 style="margin:0; border:none; padding:0;">Active Directory Kapcsolat (LDAP)</h4>
+                <button class="btn" style="background:#475569; padding:4px 10px; font-size:11.5px;" onclick="testAdConnection()">🔌 Kapcsolat Tesztelése</button>
+            </div>
+            <label>Szerver Cím (Szerver:Port)</label><input type="text" id="cfg_ad_server">
+            <label>Olvasó Felhasználó (Szervizfiók)</label><input type="text" id="cfg_ad_user">
+            
+            <label>AD Szervizfiók Jelszava</label>
+            <div style="position:relative; margin-bottom:12px;">
+                <input type="password" id="cfg_ad_password" placeholder="Jelszó beírása..." style="padding-right:45px; margin-bottom:0;">
+                <button type="button" onclick="togglePasswordVisibility('cfg_ad_password', this)" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:18px; padding:0;" title="Jelszó felfedése / elrejtése">👁️</button>
+            </div>
+
+            <label>Search Base (Keresési gyökér)</label><input type="text" id="cfg_ad_base">
+            <label>Automatikus Letöltés Gyakorisága</label>
+            <select id="cfg_sync_interval">
+                <option value="0">Kikapcsolva</option>
+                <option value="5">5 percenként</option>
+                <option value="15">15 percenként</option>
+                <option value="60">1 óra</option>
+                <option value="240">4 óra</option>
+                <option value="360">6 óra</option>
+                <option value="720">12 óra</option>
+                <option value="1440">24 óra (1 nap)</option>
+            </select>
+        </div>
+
+        <!-- GitHub Integráció & Kód Publikálása (Push) -->
+        <div class="card-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h4 style="margin:0; border:none; padding:0;">GitHub Integráció & Publikáció</h4>
+                <button class="btn" style="background:#475569; padding:4px 10px; font-size:11.5px;" onclick="testGitHub()">Git Teszt</button>
+            </div>
+            
+            <label>Repó (Owner/Repo)</label><input type="text" id="cfg_gh_repo">
+            
+            <label>Personal Access Token (PAT)</label>
+            <div style="position:relative; margin-bottom:12px;">
+                <input type="password" id="cfg_gh_token" placeholder="ghp_..." style="padding-right:45px; margin-bottom:0;">
+                <button type="button" onclick="togglePasswordVisibility('cfg_gh_token', this)" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:18px; padding:0;" title="Token felfedése / elrejtése">👁️</button>
+            </div>
+
+            <label>Cél Ág (Branch)</label><input type="text" id="cfg_gh_branch">
+
+            <!-- VISSZAÁLLÍTOTT GITHUB PUSH & VERZIÓ KÖZPONT -->
+            <div style="margin-top:12px; border-top:1px dashed #cbd5e1; padding-top:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:13px;">Aktuális verzió: <b style="color:#0284c7; font-size:14px;">v<span id="app_version_label">betöltés...</span></b></span>
+                    <button class="btn" style="background:#0284c7; padding:3px 8px; font-size:11px;" onclick="fetchLiveGitHubVersion()">🔄 Verzió Frissítése</button>
+                </div>
+                <label style="margin-bottom:4px; display:block; font-size:12px;">Új verzió megjegyzése (Commit message):</label>
+                <input type="text" id="gh_custom_msg" placeholder="pl. Kereső javítása és új mentési funkciók..." style="margin-bottom:8px; font-size:12px;">
+                <button id="ghPushBtn" class="btn" style="background:#16a34a; width:100%; padding:8px; font-weight:bold; font-size:12.5px;" onclick="pushToGitHub()">
+                    🚀 Kód Publikálása (Push & Verzió Növelés)
+                </button>
+                
+                <div style="margin-top:10px;">
+                    <small style="color:#64748b; font-weight:bold;">Legutóbbi GitHub Commitek & Verziók:</small>
+                    <div id="gh_history_list" style="margin-top:4px; max-height:120px; overflow-y:auto; font-size:11.5px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:6px 10px;">
+                        Előzmények betöltése...
+                    </div>
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px dashed #cbd5e1; margin:15px 0 10px 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="margin:0;">Ollama AI API URL</label>
+                <button class="btn" style="background:#475569; padding:3px 8px; font-size:11px;" onclick="testOllamaConnection()">🤖 Ollama Teszt</button>
+            </div>
+            <input type="text" id="cfg_ollama_url" style="margin-top:5px;">
+        </div>
+    </div>
+    <button class="btn" style="width:100%; margin-top:10px; padding:10px;" onclick="saveUnifiedSettings()">💾 Kapcsolati Beállítások Mentése</button>
+</div>
+
+<!-- 2. AL-FÜL: ADATBÁZIS & RENDSZERKARBANTARTÁS -->
+<div id="setBoxMaint" style="display:none;">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+        <div class="card-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h4 style="margin:0; border:none; padding:0;">🩺 Rendszer Öndiagnosztika (Health Check)</h4>
+                <button class="btn" style="background:#0284c7; padding:4px 10px; font-size:11.5px;" onclick="runSystemHealthCheck()">🔍 Ellenőrzés Most</button>
+            </div>
+            <div id="healthCheckResultsBox" style="font-size:12.5px; line-height:1.8;">
+                <span style="color:#64748b;">Kattintson az ellenőrzés gombra a komponensek állapotának teszteléséhez.</span>
+            </div>
+        </div>
+
+        <div class="card-box">
+            <h4 style="margin-top:0;">🧹 Napló- és Telemetria Megőrzés (Retention)</h4>
+            <label>Hardver telemetria megőrzési ideje (nap)</label>
+            <input type="number" id="cfg_ret_telemetry" min="7" max="365" value="60">
+            <label>Webes belépési és biztonsági naplók megőrzése (nap)</label>
+            <input type="number" id="cfg_ret_logs" min="7" max="730" value="90">
+            <small style="display:block; color:#64748b; margin-top:-5px; margin-bottom:10px;">
+                Megjegyzés: Az AD jogosultsági audit napló sosem törlődik automatikusan!
+            </small>
+            <div style="display:flex; gap:10px;">
+                <button class="btn" style="flex:1;" onclick="saveUnifiedSettings()">Házirend Mentése</button>
+                <button class="btn" style="background:#ea580c;" onclick="runLogRetentionCleanup()">🧹 Elavult Pontok Törlése</button>
+            </div>
+        </div>
+
+        <div class="card-box" style="grid-column: span 2; border-left: 4px solid #0284c7; background:#ffffff;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h4 style="margin:0; border:none; padding:0; color:#0369a1;">📚 Teljes Rendszerdokumentáció, Séma & LLM Skill Prompt Újraépítése</h4>
+                    <small style="color:#64748b;">
+                        Újragenerálja a <code>docs/</code> mappában az adatbázis sémák leírását (<code>DATABASE_SCHEMA.md</code>), az API specifikációt (<code>API_DOCUMENTATION.md</code>), az architektúra leírást (<code>SYSTEM_REBUILD_PROMPT.md</code>) és az LLM szakértői promptját (<code>LLM_SKILL_PROMPT.md</code>).
+                    </small>
+                </div>
+                <button id="rebuildDocsBtn" class="btn" style="background:#0284c7; padding:10px 18px; font-size:13px; font-weight:bold;" onclick="rebuildSystemDocs()">
+                    📚 Dokumentáció & LLM Prompt Újraépítése
+                </button>
+            </div>
+            <div id="docsRebuildStatusBox" style="margin-top:10px; font-size:12.5px; display:none; padding:8px 12px; border-radius:6px; background:#f0fdf4; border:1px solid #86efac; color:#166534;"></div>
+        </div>
+
+        <div class="card-box" style="grid-column: span 2; border-left: 4px solid #16a34a; background:#ffffff;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h4 style="margin:0; border:none; padding:0; color:#15803d;">⚡ PostgreSQL Index Regenerálás & Karbantartás</h4>
+                    <small style="color:#64748b;">
+                        Újraépíti az indexeket (REINDEX), analizálja a táblákat és tömöríti a lemezterületet (VACUUM ANALYZE).
+                    </small>
+                </div>
+                <button id="optDbBtn" class="btn" style="background:#16a34a; padding:10px 18px; font-size:13px; font-weight:bold;" onclick="optimizeDatabase()">
+                    ⚡ Adatbázis Optimalizálása Most
+                </button>
+            </div>
+            <div id="dbOptStatusBox" style="margin-top:10px; font-size:12.5px; display:none; padding:8px 12px; border-radius:6px; background:#f0fdf4; border:1px solid #86efac; color:#166534;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 3. AL-FÜL: MEGJELENÍTÉS & RENDSZERSZINTŰ BEÁLLÍTÁSOK -->
+<div id="setBoxUi" style="display:none;">
+    <div class="card-box" style="max-width:800px; margin:0 auto; background:white;">
+        <h4 style="margin-top:0;">🎨 Kezelőfelület és Megjelenítési Testreszabás</h4>
+        <label>Alapértelmezett Kezdőfül</label>
+        <select id="cfg_default_tab">
+            <option value="dashboard">Jogosultság Változások</option>
+            <option value="users">Felhasználók és Csoportok</option>
+            <option value="ad-changes">📅 AD Változás Elemző</option>
+            <option value="telemetry">📊 Telemetria & Rendszerállapot</option>
+            <option value="sync-history">Szinkronizálási Napló</option>
+            <option value="ai">AI Elemző & Asszisztens</option>
+        </select>
+        <label>Táblázatok Megjelenítési Sűrűsége</label>
+        <select id="cfg_table_density">
+            <option value="normal">Normál (Kényelmes sorközök)</option>
+            <option value="compact">Kompakt (Sűrűbb sorok)</option>
+        </select>
+        <label>Listákban Megjelenített Elemek Száma</label>
+        <select id="cfg_page_size">
+            <option value="50">50 elem / oldal</option>
+            <option value="100">100 elem / oldal</option>
+            <option value="150">150 elem / oldal (Alapértelmezett)</option>
+            <option value="300">300 elem / oldal</option>
+        </select>
+        <label>Élő Telemetria Automata Frissítési Üteme</label>
+        <select id="cfg_telemetry_refresh">
+            <option value="5">5 másodpercenként (Gyors)</option>
+            <option value="10">10 másodpercenként (Normál)</option>
+            <option value="30">30 másodpercenként (Kímélő)</option>
+            <option value="0">Kikapcsolva</option>
+        </select>
+        <button class="btn" style="width:100%; margin-top:15px; padding:10px;" onclick="saveUnifiedSettings()">
+            💾 Megjelenítési Beállítások Mentése & Alkalmazása
+        </button>
+    </div>
+</div>

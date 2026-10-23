@@ -1,0 +1,234 @@
+import os
+import sys
+import re
+import threading
+from datetime import datetime, timezone
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from sqlalchemy.orm import Session
+from sqlalchemy import text, desc
+from apscheduler.schedulers.background import BackgroundScheduler
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
+from database import engine, SessionLocal, get_db
+import models
+from config_manager import init_default_settings, get_setting
+from auth import authenticate_ad_user, create_session_token, verify_session_token, COOKIE_NAME
+from telemetry import register_active_session, close_active_session, collect_and_save_telemetry, log_web_activity
+from sync_engine import run_ad_sync
+
+try:
+    from routers import users, ad_analytics, telemetry, sync, history, backups, github, ai, settings
+except ImportError:
+    from app.routers import users, ad_analytics, telemetry, sync, history, backups, github, ai, settings
+
+models.Base.metadata.create_all(bind=engine)
+
+migration_statements = [
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS last_logon_date TIMESTAMP WITH TIME ZONE;",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS user_status VARCHAR(100);",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS ou_path TEXT;",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) DEFAULT 'AD_SYNC';",
+    "ALTER TABLE ad_users ADD COLUMN IF NOT EXISTS source_ref VARCHAR(255) DEFAULT 'LIVE_AD';",
+    "ALTER TABLE ad_groups ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) DEFAULT 'AD_SYNC';",
+    "ALTER TABLE ad_groups ADD COLUMN IF NOT EXISTS source_ref VARCHAR(255) DEFAULT 'LIVE_AD';",
+    "ALTER TABLE ad_audit_log ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) DEFAULT 'AD_SYNC';",
+    "ALTER TABLE ad_audit_log ADD COLUMN IF NOT EXISTS source_ref VARCHAR(255) DEFAULT 'LIVE_AD';",
+    "ALTER TABLE ad_audit_log ALTER COLUMN raw_diff TYPE TEXT USING raw_diff::text;",
+    """CREATE TABLE IF NOT EXISTS system_telemetry (
+        id SERIAL PRIMARY KEY, timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        cpu_percent FLOAT DEFAULT 0.0, cpu_temp_c FLOAT, ram_total_mb FLOAT DEFAULT 0.0, ram_used_mb FLOAT DEFAULT 0.0, ram_percent FLOAT DEFAULT 0.0,
+        disk_total_gb FLOAT DEFAULT 0.0, disk_used_gb FLOAT DEFAULT 0.0, disk_free_gb FLOAT DEFAULT 0.0, db_size_mb FLOAT DEFAULT 0.0,
+        gpu_name VARCHAR(100), gpu_util_percent FLOAT, gpu_mem_used_mb FLOAT, gpu_mem_total_mb FLOAT, gpu_temp_c FLOAT, gpu_power_w FLOAT,
+        llm_tokens_prompt INTEGER DEFAULT 0, llm_tokens_eval INTEGER DEFAULT 0, llm_tokens_total INTEGER DEFAULT 0
+    );""",
+    """CREATE TABLE IF NOT EXISTS web_access_log (
+        id SERIAL PRIMARY KEY, timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        username VARCHAR(255) NOT NULL, client_ip VARCHAR(100) NOT NULL, browser VARCHAR(100), os_name VARCHAR(100),
+        device_type VARCHAR(50), location VARCHAR(255), user_agent TEXT, action VARCHAR(100) NOT NULL, details TEXT, status VARCHAR(50) DEFAULT 'SIKERES'
+    );""",
+    """CREATE TABLE IF NOT EXISTS host_ip_history (
+        id SERIAL PRIMARY KEY, timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        ip_address VARCHAR(100) NOT NULL, hostname VARCHAR(255), details TEXT
+    );""",
+    """CREATE TABLE IF NOT EXISTS active_web_sessions (
+        session_id VARCHAR(100) PRIMARY KEY, username VARCHAR(255) NOT NULL,
+        login_time TIMESTAMP WITH TIME ZONE DEFAULT NOW(), last_activity TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        client_ip VARCHAR(100), browser VARCHAR(100), os_name VARCHAR(100), device_type VARCHAR(50), location VARCHAR(255), user_agent TEXT
+    );"""
+]
+
+for stmt in migration_statements:
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(stmt))
+            conn.commit()
+    except Exception: pass
+
+db_init = SessionLocal()
+init_default_settings(db_init)
+db_init.close()
+
+scheduler = BackgroundScheduler()
+JOB_ID = "ad_sync_job"
+TELEMETRY_JOB_ID = "telemetry_job"
+
+def scheduled_sync_job():
+    sync.execute_sync_with_log("Ütemezett")
+
+def scheduled_telemetry_job():
+    db = SessionLocal()
+    try: collect_and_save_telemetry(db)
+    except Exception: pass
+    finally: db.close()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db = SessionLocal()
+    sync_minutes = int(get_setting(db, "SYNC_INTERVAL_MINUTES", "15"))
+    db.close()
+    if sync_minutes > 0: scheduler.add_job(scheduled_sync_job, 'interval', minutes=sync_minutes, id=JOB_ID)
+    scheduler.add_job(scheduled_telemetry_job, 'interval', minutes=15, id=TELEMETRY_JOB_ID)
+    scheduler.start()
+    def startup_worker():
+        init_db = SessionLocal()
+        try:
+            collect_and_save_telemetry(init_db)
+            log_web_activity(init_db, None, "SYSTEM", "RENDSZER_INDULÁS", "AD Tracker szerver sikeresen elindult", "SIKERES")
+        except Exception: pass
+        finally: init_db.close()
+    threading.Thread(target=startup_worker).start()
+    yield
+    scheduler.shutdown()
+
+app = FastAPI(title="AD Tracker", lifespan=lifespan)
+
+@app.get("/static/{file_path:path}")
+def serve_static(file_path: str):
+    full_path = os.path.join(APP_DIR, "static", file_path)
+    if os.path.isfile(full_path):
+        media_type = "text/css" if file_path.endswith(".css") else ("application/javascript" if file_path.endswith(".js") else None)
+        return FileResponse(full_path, media_type=media_type)
+    return HTMLResponse("File not found", status_code=404)
+
+app.include_router(users.router)
+app.include_router(ad_analytics.router)
+app.include_router(telemetry.router)
+app.include_router(sync.router)
+app.include_router(history.router)
+app.include_router(backups.router)
+app.include_router(github.router)
+app.include_router(ai.router)
+app.include_router(settings.router)
+
+def get_current_session(request: Request):
+    return verify_session_token(request.cookies.get(COOKIE_NAME))
+
+def get_current_user(request: Request):
+    user, _ = get_current_session(request)
+    return user
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, error: str = None):
+    if get_current_user(request): return RedirectResponse(url="/", status_code=303)
+    err_html = f'<div style="background:#fee2e2; color:#dc2626; padding:12px; border-radius:6px; margin-bottom:15px; font-size:14px;">{error}</div>' if error else ''
+    return f"""<!DOCTYPE html><html lang="hu"><head><meta charset="UTF-8"><title>Belépés</title><style>
+    body{{font-family:sans-serif; background:#0f172a; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;}}
+    .card{{background:white; padding:35px; border-radius:12px; max-width:400px; width:100%; box-sizing:border-box;}}
+    input{{width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; margin-bottom:15px;}}
+    .btn{{width:100%; background:#0284c7; color:white; border:none; padding:12px; border-radius:6px; cursor:pointer; font-weight:bold;}}
+</style></head><body><div class="card"><h2>AD Tracker Belépés</h2>{err_html}
+<form method="POST" action="/login">
+    Felhasználó (@tspc.hu)<input type="text" name="username" required autofocus>
+    Jelszó<input type="password" name="password" required>
+    <button type="submit" class="btn">Bejelentkezés</button>
+</form></div></body></html>"""
+
+@app.post("/login")
+def process_login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    success, result = authenticate_ad_user(db, username, password)
+    if not success:
+        log_web_activity(db, request, username, "BEJELENTKEZÉS", "Hibás felhasználónév vagy jelszó", "SIKERTELEN")
+        return RedirectResponse(url="/login?error=Hibas+adatok", status_code=303)
+    token, session_id = create_session_token(result)
+    register_active_session(db, request, session_id, result)
+    log_web_activity(db, request, result, "BEJELENTKEZÉS", f"Sikeres belépés (Munkamenet: {session_id[:8]})", "SIKERES")
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key=COOKIE_NAME, value=token, httponly=True, max_age=86400 * 7, samesite="lax")
+    return response
+
+@app.get("/logout")
+def process_logout(request: Request, db: Session = Depends(get_db)):
+    user, session_id = get_current_session(request)
+    if user:
+        close_active_session(db, session_id)
+        log_web_activity(db, request, user, "KIJELENTKEZÉS", f"Kijelentkezés (Munkamenet: {session_id[:8] if session_id else '-'})", "SIKERES")
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
+def render_modular_template(template_name: str, context: dict) -> str:
+    templates_dir = os.path.join(APP_DIR, "templates")
+    main_file = os.path.join(templates_dir, template_name)
+    with open(main_file, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    def replace_include(match):
+        sub_path = match.group(1).strip()
+        sub_file = os.path.join(templates_dir, sub_path)
+        if os.path.isfile(sub_file):
+            with open(sub_file, "r", encoding="utf-8") as sf:
+                return sf.read()
+        return f"<!-- Missing: {sub_path} -->"
+
+    pattern_include = re.compile(r"{%\s*include\s+['\"]([^'\"]+)['\"]\s*%}")
+    html = pattern_include.sub(replace_include, html)
+
+    for k, v in context.items():
+        html = html.replace("{{ " + k + " }}", str(v))
+        html = html.replace("{{" + k + "}}", str(v))
+        html = html.replace("{{ " + k + "|safe }}", str(v))
+        html = html.replace("{{" + k + "|safe}}", str(v))
+
+    return html
+
+@app.get("/", response_class=HTMLResponse)
+def index_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_user(request)
+    if not current_user: return RedirectResponse(url="/login", status_code=303)
+
+    logs = db.query(models.ADAuditLog).order_by(desc(models.ADAuditLog.timestamp)).limit(50).all()
+    rows = ""
+    for l in logs:
+        badge = "#16a34a" if "ADDED" in l.change_type or "CREATED" in l.change_type else ("#dc2626" if "REMOVED" in l.change_type or "DISABLED" in l.change_type else "#2563eb")
+        t = l.timestamp.strftime("%Y-%m-%d %H:%M") if l.timestamp else ""
+        src = getattr(l, "source_ref", "AD") or "AD"
+        src_badge = f'<span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-size:10px; font-family:monospace; margin-left:6px;">{src}</span>'
+        rows += f'<tr><td>{t}</td><td><b>{l.entity_name}</b> {src_badge}</td><td><span style="background:{badge}; color:white; padding:3px 6px; border-radius:4px; font-size:11px;">{l.change_type}</span></td><td>{l.details}</td></tr>'
+
+    if not rows:
+        rows = '<tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:20px;">Nincs naplózott változás.</td></tr>'
+
+    job = scheduler.get_job(JOB_ID)
+    interval_min = int(job.trigger.interval.total_seconds() / 60) if job else 0
+
+    opts = [(0, "Kikapcsolva"), (5, "5 percenként"), (15, "15 percenként"), (60, "1 óra"), (240, "4 óra"), (360, "6 óra"), (720, "12 óra"), (1440, "24 óra"), (2880, "48 óra")]
+    interval_options = "\n".join([f'<option value="{m}" {"selected" if interval_min==m else ""}>{lbl}</option>' for m, lbl in opts])
+
+    content = render_modular_template("index.html", {
+        "current_user": current_user,
+        "rows": rows,
+        "ad_server": get_setting(db, "AD_SERVER", ""),
+        "ad_user": get_setting(db, "AD_USER", ""),
+        "ad_base": get_setting(db, "AD_SEARCH_BASE", ""),
+        "ollama_url": get_setting(db, "OLLAMA_URL", "http://ollama:11434"),
+        "gh_repo": get_setting(db, "GH_REPO", ""),
+        "gh_token": get_setting(db, "GH_TOKEN", ""),
+        "gh_branch": get_setting(db, "GH_BRANCH", "main"),
+        "interval_options": interval_options
+    })
+    return HTMLResponse(content=content)
