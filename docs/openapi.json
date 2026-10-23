@@ -211,6 +211,85 @@
         }
       }
     },
+    "/api/ad-analytics/day-events": {
+      "get": {
+        "summary": "Api Ad Analytics Day Events",
+        "operationId": "api_ad_analytics_day_events_api_ad_analytics_day_events_get",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Date"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "ALL",
+              "title": "Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ad-analytics/summary": {
+      "get": {
+        "summary": "Api Ad Analytics Summary",
+        "operationId": "api_ad_analytics_summary_api_ad_analytics_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ad-analytics/ask": {
+      "post": {
+        "summary": "Api Ad Analytics Ask",
+        "operationId": "api_ad_analytics_ask_api_ad_analytics_ask_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/telemetry/live": {
       "get": {
         "summary": "Api Telemetry Live",

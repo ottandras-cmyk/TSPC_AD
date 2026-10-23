@@ -759,6 +759,35 @@
         }
       ]
     },
+    "app/ad_analytics.py": {
+      "classes": [],
+      "functions": [
+        {
+          "name": "is_valid_group_name",
+          "decorators": []
+        },
+        {
+          "name": "extract_group_name",
+          "decorators": []
+        },
+        {
+          "name": "get_clean_ad_changes",
+          "decorators": []
+        },
+        {
+          "name": "get_ad_analytics_summary",
+          "decorators": []
+        },
+        {
+          "name": "get_day_detailed_events",
+          "decorators": []
+        },
+        {
+          "name": "ask_ad_changes_ai",
+          "decorators": []
+        }
+      ]
+    },
     "app/main.py": {
       "classes": [],
       "functions": [
@@ -838,6 +867,24 @@
         },
         {
           "name": "trigger_sync_manual",
+          "decorators": [
+            "@app.post"
+          ]
+        },
+        {
+          "name": "api_ad_analytics_day_events",
+          "decorators": [
+            "@app.get"
+          ]
+        },
+        {
+          "name": "api_ad_analytics_summary",
+          "decorators": [
+            "@app.get"
+          ]
+        },
+        {
+          "name": "api_ad_analytics_ask",
           "decorators": [
             "@app.post"
           ]
@@ -1351,6 +1398,27 @@
       ]
     },
     {
+      "path": "/api/ad-analytics/day-events",
+      "name": "api_ad_analytics_day_events",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "path": "/api/ad-analytics/summary",
+      "name": "api_ad_analytics_summary",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "path": "/api/ad-analytics/ask",
+      "name": "api_ad_analytics_ask",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
       "path": "/api/telemetry/live",
       "name": "api_telemetry_live",
       "methods": [
@@ -1524,13 +1592,13 @@
       "id": "telemetry_job",
       "name": "scheduled_telemetry_job",
       "trigger": "interval[0:15:00]",
-      "next_run_time": "2026-10-21 19:44:50.700066+00:00"
+      "next_run_time": "2026-10-23 05:06:56.041609+00:00"
     },
     {
       "id": "ad_sync_job",
       "name": "scheduled_sync_job",
       "trigger": "interval[1 day, 0:00:00]",
-      "next_run_time": "2026-10-22 19:29:50.699996+00:00"
+      "next_run_time": "2026-10-23 18:06:56.041550+00:00"
     }
   ],
   "environment": {
@@ -1572,7 +1640,19 @@
         "desc": ""
       },
       "APP_VERSION": {
-        "value": "1.04",
+        "value": "1.05",
+        "desc": ""
+      },
+      "LLM_TOKENS_PROMPT": {
+        "value": "***",
+        "desc": ""
+      },
+      "LLM_TOKENS_EVAL": {
+        "value": "***",
+        "desc": ""
+      },
+      "LLM_TOKENS_TOTAL": {
+        "value": "***",
         "desc": ""
       }
     },

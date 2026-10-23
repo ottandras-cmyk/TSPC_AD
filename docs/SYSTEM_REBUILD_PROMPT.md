@@ -1,5 +1,5 @@
 # MASTER SYSTEM REBUILDER BLUEPRINT & PROMPT
-# Generálva az élő rendszerből: 2026-10-21 19:30:57 UTC | Verzió: v1.04
+# Generálva az élő rendszerből: 2026-10-23 04:54:55 UTC | Verzió: v1.05
 
 ---
 [DIRECTIVE FOR AI SYSTEM ARCHITECT]
@@ -9,6 +9,7 @@ Generate every component (endpoints, database models, background scheduler, LDAP
 
 ## 1. REQUIREMENTS ÉS CSOMAGVERZIÓK
 ```text
+ad_analytics
 apscheduler>=3.10.4
 fastapi>=0.110.0
 hashlib
@@ -120,6 +121,27 @@ uvicorn>=0.28.0
   {
     "path": "/api/sync",
     "name": "trigger_sync_manual",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "path": "/api/ad-analytics/day-events",
+    "name": "api_ad_analytics_day_events",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/ad-analytics/summary",
+    "name": "api_ad_analytics_summary",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/ad-analytics/ask",
+    "name": "api_ad_analytics_ask",
     "methods": [
       "POST"
     ]
@@ -423,6 +445,35 @@ uvicorn>=0.28.0
       }
     ]
   },
+  "app/ad_analytics.py": {
+    "classes": [],
+    "functions": [
+      {
+        "name": "is_valid_group_name",
+        "decorators": []
+      },
+      {
+        "name": "extract_group_name",
+        "decorators": []
+      },
+      {
+        "name": "get_clean_ad_changes",
+        "decorators": []
+      },
+      {
+        "name": "get_ad_analytics_summary",
+        "decorators": []
+      },
+      {
+        "name": "get_day_detailed_events",
+        "decorators": []
+      },
+      {
+        "name": "ask_ad_changes_ai",
+        "decorators": []
+      }
+    ]
+  },
   "app/main.py": {
     "classes": [],
     "functions": [
@@ -502,6 +553,24 @@ uvicorn>=0.28.0
       },
       {
         "name": "trigger_sync_manual",
+        "decorators": [
+          "@app.post"
+        ]
+      },
+      {
+        "name": "api_ad_analytics_day_events",
+        "decorators": [
+          "@app.get"
+        ]
+      },
+      {
+        "name": "api_ad_analytics_summary",
+        "decorators": [
+          "@app.get"
+        ]
+      },
+      {
+        "name": "api_ad_analytics_ask",
         "decorators": [
           "@app.post"
         ]
@@ -953,13 +1022,13 @@ uvicorn>=0.28.0
     "id": "telemetry_job",
     "name": "scheduled_telemetry_job",
     "trigger": "interval[0:15:00]",
-    "next_run_time": "2026-10-21 19:44:50.700066+00:00"
+    "next_run_time": "2026-10-23 05:06:56.041609+00:00"
   },
   {
     "id": "ad_sync_job",
     "name": "scheduled_sync_job",
     "trigger": "interval[1 day, 0:00:00]",
-    "next_run_time": "2026-10-22 19:29:50.699996+00:00"
+    "next_run_time": "2026-10-23 18:06:56.041550+00:00"
   }
 ]
 ```
@@ -1005,7 +1074,19 @@ uvicorn>=0.28.0
       "desc": ""
     },
     "APP_VERSION": {
-      "value": "1.04",
+      "value": "1.05",
+      "desc": ""
+    },
+    "LLM_TOKENS_PROMPT": {
+      "value": "***",
+      "desc": ""
+    },
+    "LLM_TOKENS_EVAL": {
+      "value": "***",
+      "desc": ""
+    },
+    "LLM_TOKENS_TOTAL": {
+      "value": "***",
       "desc": ""
     }
   },
@@ -1029,7 +1110,7 @@ uvicorn>=0.28.0
 ## 8. POSTGRESQL DDL ADATBÁZIS SÉMA
 ```sql
 -- AD TRACKER - ÉLŐ POSTGRESQL DDL ADATBÁZIS SÉMA
--- Generálva: 2026-10-21 19:30:57 UTC | Verzió: v1.04
+-- Generálva: 2026-10-23 04:54:55 UTC | Verzió: v1.05
 
 CREATE TABLE active_web_sessions (
 	session_id VARCHAR(100) NOT NULL, 

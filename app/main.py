@@ -25,6 +25,7 @@ from telemetry import (
     log_web_activity, get_web_access_logs, get_host_ip_history,
     register_active_session, update_active_session, close_active_session, get_active_sessions_info
 )
+from ad_analytics import get_ad_analytics_summary, ask_ad_changes_ai
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -108,6 +109,39 @@ for stmt in migration_statements:
             conn.commit()
     except Exception:
         pass
+
+# Korábbi hamis "USER_CREATED" és "GROUP_CREATED" rekordok letisztázása az adatbázisban
+try:
+    with engine.connect() as conn:
+        conn.execute(text("""
+            UPDATE ad_audit_log
+            SET change_type = 'SCOPE_ADOPTED',
+                details = 'Korábban létező AD fiók beemelve a hatókörbe (hatókör-különbség korrigálva)'
+            WHERE change_type = 'USER_CREATED'
+              AND id IN (
+                  SELECT l.id
+                  FROM ad_audit_log l
+                  JOIN ad_users u ON lower(l.entity_name) = lower(u.sam_account_name)
+                  WHERE u.when_created IS NOT NULL
+                    AND u.when_created < (l.timestamp - INTERVAL '3 days')
+              );
+        """))
+        conn.execute(text("""
+            UPDATE ad_audit_log
+            SET change_type = 'SCOPE_ADOPTED',
+                details = 'Korábban létező AD csoport beemelve a hatókörbe (hatókör-különbség korrigálva)'
+            WHERE change_type = 'GROUP_CREATED'
+              AND id IN (
+                  SELECT l.id
+                  FROM ad_audit_log l
+                  JOIN ad_groups g ON lower(l.entity_name) = lower(g.sam_account_name)
+                  WHERE g.when_created IS NOT NULL
+                    AND g.when_created < (l.timestamp - INTERVAL '3 days')
+              );
+        """))
+        conn.commit()
+except Exception:
+    pass
 
 db_init = SessionLocal()
 init_default_settings(db_init)
@@ -345,6 +379,27 @@ def trigger_sync_manual(request: Request, db: Session = Depends(get_db)):
     threading.Thread(target=execute_sync_with_log, args=("Manuális",)).start()
     return {"status": "STARTED"}
 
+# --- AD VÁLTOZÁS ELEMZŐ VÉGPONTOK ---
+@app.get("/api/ad-analytics/day-events")
+def api_ad_analytics_day_events(date: str, type: str = "ALL", request: Request = None, db: Session = Depends(get_db)):
+    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    from ad_analytics import get_day_detailed_events
+    return get_day_detailed_events(db, date_str=date, event_type=type)
+
+@app.get("/api/ad-analytics/summary")
+def api_ad_analytics_summary(request: Request, db: Session = Depends(get_db)):
+    if not get_current_user(request): return JSONResponse(status_code=401, content={})
+    return get_ad_analytics_summary(db)
+
+@app.post("/api/ad-analytics/ask")
+async def api_ad_analytics_ask(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
+    data = await request.json()
+    res = ask_ad_changes_ai(db, data.get("model"), data.get("prompt"))
+    log_web_activity(db, request, user, "AD_VÁLTOZÁS_AI_KÉRDÉS", f"Modell: {data.get('model')}", "SIKERES" if res.get("status") == "SUCCESS" else "HIBA")
+    return res
+
 # --- TELEMETRIA, MUNKAMENETEK ÉS WEB AUDIT ---
 @app.get("/api/telemetry/live")
 def api_telemetry_live(request: Request, db: Session = Depends(get_db)):
@@ -567,7 +622,6 @@ async def api_gh_push(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         return {"status": "ERROR", "message": f"Hiba: {str(e)}"}
 
-# --- AI VÉGPONTOK ---
 @app.get("/api/ai/models")
 def get_ai_models(request: Request, db: Session = Depends(get_db)):
     if not get_current_user(request): return JSONResponse(status_code=401, content={})

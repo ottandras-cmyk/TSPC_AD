@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <title>AD Tracker Admin & Rendszerközpont</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; margin:0; padding: 20px; color: #1e293b; }
         .container { max-width: 1450px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .top-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 15px; }
-        .tabs { border-bottom: 1px solid #e2e8f0; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
-        .tab { padding: 10px 14px; cursor: pointer; font-weight: bold; color: #64748b; border-bottom: 3px solid transparent; font-size: 13.5px; }
+        .tabs { border-bottom: 1px solid #e2e8f0; margin-bottom: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .tab { padding: 9px 13px; cursor: pointer; font-weight: bold; color: #64748b; border-bottom: 3px solid transparent; font-size: 13px; }
         .tab.active { color: #0284c7; border-bottom: 3px solid #0284c7; }
         .content { display: none; }
         .content.active { display: block; }
@@ -44,6 +45,27 @@
         
         .scroll-box { max-height: 280px; overflow-y: auto; background: white; border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 10px; }
 
+        .window-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .window-card { background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; cursor: pointer; transition: all 0.2s; border-left: 4px solid #0284c7; }
+        .window-card:hover, .window-card.active { border-color: #0284c7; box-shadow: 0 4px 10px rgba(2, 132, 199, 0.15); transform: translateY(-2px); }
+        .window-card .w-label { font-size: 12px; font-weight: bold; color: #64748b; text-transform: uppercase; }
+        .window-card .w-val { font-size: 26px; font-weight: 800; color: #0284c7; margin: 4px 0; }
+        .window-card .w-desc { font-size: 11.5px; color: #475569; }
+
+        /* KATTINTHATÓ SZÁM CELLÁK */
+        .click-num { cursor: pointer; font-weight: 800; padding: 3px 8px; border-radius: 5px; text-decoration: underline; transition: all 0.15s ease; display: inline-block; }
+        .click-num:hover { transform: scale(1.08); box-shadow: 0 2px 5px rgba(0,0,0,0.12); }
+        .click-num-total { color: #0284c7; background: #e0f2fe; }
+        .click-num-add { color: #15803d; background: #dcfce7; }
+        .click-num-rem { color: #b91c1c; background: #fee2e2; }
+        .click-num-life { color: #475569; background: #f1f5f9; }
+
+        /* RENDEZHETŐ ÉS SZŰRHETŐ FEJLÉC STÍLUSOK */
+        .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; transition: background 0.15s; }
+        .sortable-th:hover { background: #e2e8f0; color: #0284c7; }
+        .sort-icon { font-size: 11px; margin-left: 4px; color: #94a3b8; font-weight: bold; }
+        .col-filter-input, .col-filter-select { margin: 0; padding: 4px 6px; font-size: 11px; height: 26px; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; box-sizing: border-box; background: white; }
+
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); overflow-y: auto; }
         .modal-content { background-color: #fff; margin: 3% auto; padding: 30px; border-radius: 12px; width: 85%; max-width: 950px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
         .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
@@ -57,7 +79,25 @@
         let allGroups = [];
         let selectedLocalFiles = [];
         let chartCpu = null, chartRam = null, chartStorage = null, chartLlm = null;
+        let chartAdChanges = null;
         let telemetryInterval = null;
+        let adAnalyticsData = null;
+        let activeWindowKey = 'w_24h';
+
+        // Napi részletező modális állapota
+        let currentDayEvents = [];
+        let activeDayFilterType = 'ALL';
+        let activeDayDate = '';
+        let daySortCol = 'timestamp';
+        let daySortDir = 'desc';
+
+        // Diagram dátum- és zoom állapotai
+        let rawChartLabels = [];
+        let rawChartTotal = [];
+        let rawChartAdded = [];
+        let rawChartRemoved = [];
+        let rawChartLifecycle = [];
+        let currentFilteredLabels = [];
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -69,7 +109,8 @@
             
             if (tabId === 'users' && allUsers.length === 0) loadUsersAndGroups();
             if (tabId === 'sync-history') loadSyncHistory();
-            if (tabId === 'ai') loadAiModels();
+            if (tabId === 'ad-changes') loadAdAnalytics();
+            if (tabId === 'ai') loadAiModels('modelSelect');
             if (tabId === 'backups') loadBackups();
             if (tabId === 'history-import') autoScanServerFolder();
             if (tabId === 'settings') loadGitHubHistory();
@@ -97,13 +138,511 @@
         }
         fetchLiveGitHubVersion();
 
-        // --- MUNKAMENETEK BETÖLTÉSE (AKTUÁLIS ÉS MÁS AKTÍV BELÉPŐK) ---
+        // --- AD VÁLTOZÁS ELEMZŐ MOTOR ---
+        async function loadAdAnalytics() {
+            loadAiModels('adChangesModelSelect');
+            try {
+                const res = await fetch('/api/ad-analytics/summary');
+                adAnalyticsData = await res.json();
+                
+                document.getElementById('card_val_24h').innerText = adAnalyticsData.summary_counts.c_24h + ' db';
+                document.getElementById('card_val_72h').innerText = adAnalyticsData.summary_counts.c_72h + ' db';
+                document.getElementById('card_val_168h').innerText = adAnalyticsData.summary_counts.c_168h + ' db';
+                document.getElementById('card_val_30d').innerText = adAnalyticsData.summary_counts.c_30d + ' db';
+
+                rawChartLabels = adAnalyticsData.chart_data.labels || [];
+                rawChartTotal = adAnalyticsData.chart_data.total || [];
+                rawChartAdded = adAnalyticsData.chart_data.added || [];
+                rawChartRemoved = adAnalyticsData.chart_data.removed || [];
+                rawChartLifecycle = adAnalyticsData.chart_data.lifecycle || [];
+
+                if (rawChartLabels.length > 0) {
+                    document.getElementById('ad_chart_from').value = rawChartLabels[0];
+                    document.getElementById('ad_chart_to').value = rawChartLabels[rawChartLabels.length - 1];
+                }
+
+                renderAdChangesLineChart(rawChartLabels, rawChartTotal, rawChartAdded, rawChartRemoved, rawChartLifecycle);
+                renderDailyBreakdownTable(adAnalyticsData.daily_breakdown);
+                selectTimeWindow(activeWindowKey);
+            } catch(e) {}
+        }
+
+        function renderAdChangesLineChart(labels, totalData, addedData, removedData, lifecycleData) {
+            currentFilteredLabels = labels;
+            updateChartKpiSummary(labels, totalData);
+
+            if (chartAdChanges) chartAdChanges.destroy();
+            const ctx = document.getElementById('chartAdDailyChanges').getContext('2d');
+            
+            chartAdChanges = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '🔷 Összes Változás',
+                            data: totalData,
+                            borderColor: '#0284c7',
+                            backgroundColor: 'rgba(2, 132, 199, 0.08)',
+                            borderWidth: 3,
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: '#0284c7',
+                            tension: 0.25,
+                            fill: true
+                        },
+                        {
+                            label: '➕ Csoporttagság Hozzáadás',
+                            data: addedData,
+                            borderColor: '#16a34a',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: '#16a34a',
+                            tension: 0.25
+                        },
+                        {
+                            label: '➖ Csoporttagság Elvétel',
+                            data: removedData,
+                            borderColor: '#dc2626',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: '#dc2626',
+                            tension: 0.25
+                        },
+                        {
+                            label: '👤 Fiók / Státusz Változás',
+                            data: lifecycleData,
+                            borderColor: '#8b5cf6',
+                            backgroundColor: 'transparent',
+                            borderWidth: 1.5,
+                            borderDash: [4, 4],
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#8b5cf6',
+                            tension: 0.25
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (evt, activeEls) => {
+                        if (activeEls && activeEls.length > 0) {
+                            const idx = activeEls[0].index;
+                            const selectedDate = currentFilteredLabels[idx];
+                            if (selectedDate) openDayDetailModal(selectedDate, 'ALL');
+                        }
+                    },
+                    plugins: {
+                        tooltip: { mode: 'index', intersect: false, padding: 10 },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'Időtengely (Dátum)' }, grid: { color: '#f1f5f9' } },
+                        y: { beginAtZero: true, title: { display: true, text: 'Változások száma (db)' }, grid: { color: '#e2e8f0' } }
+                    }
+                }
+            });
+        }
+
+        function updateChartKpiSummary(labels, totals) {
+            if (!labels || labels.length === 0) return;
+            let maxVal = -1, maxIdx = -1, minVal = 999999, minIdx = -1, sum = 0;
+            totals.forEach((v, idx) => {
+                sum += v;
+                if (v > maxVal) { maxVal = v; maxIdx = idx; }
+                if (v < minVal) { minVal = v; minIdx = idx; }
+            });
+            const avg = (sum / totals.length).toFixed(1);
+            document.getElementById('ad_chart_peak').innerText = `${labels[maxIdx]} (${maxVal} db)`;
+            document.getElementById('ad_chart_min').innerText = `${labels[minIdx]} (${minVal} db)`;
+            document.getElementById('ad_chart_avg').innerText = `${avg} db / nap`;
+        }
+
+        function resetAdChartZoom() {
+            if (chartAdChanges) chartAdChanges.resetZoom();
+        }
+
+        function applyAdChartDateFilter() {
+            const fVal = document.getElementById('ad_chart_from').value;
+            const tVal = document.getElementById('ad_chart_to').value;
+            if (!fVal || !tVal) return;
+
+            const fIdx = rawChartLabels.findIndex(d => d >= fVal);
+            let tIdx = -1;
+            for (let i = rawChartLabels.length - 1; i >= 0; i--) {
+                if (rawChartLabels[i] <= tVal) { tIdx = i; break; }
+            }
+
+            if (fIdx === -1 || tIdx === -1 || fIdx > tIdx) {
+                alert('A kiválasztott intervallumban nincs rögzített adat.');
+                return;
+            }
+
+            renderAdChangesLineChart(
+                rawChartLabels.slice(fIdx, tIdx + 1),
+                rawChartTotal.slice(fIdx, tIdx + 1),
+                rawChartAdded.slice(fIdx, tIdx + 1),
+                rawChartRemoved.slice(fIdx, tIdx + 1),
+                rawChartLifecycle.slice(fIdx, tIdx + 1)
+            );
+        }
+
+        function setAdChartRange(days) {
+            if (rawChartLabels.length === 0) return;
+            if (days === 'all') {
+                document.getElementById('ad_chart_from').value = rawChartLabels[0];
+                document.getElementById('ad_chart_to').value = rawChartLabels[rawChartLabels.length - 1];
+                renderAdChangesLineChart(rawChartLabels, rawChartTotal, rawChartAdded, rawChartRemoved, rawChartLifecycle);
+                return;
+            }
+            const count = Math.min(days, rawChartLabels.length);
+            const startIdx = rawChartLabels.length - count;
+            document.getElementById('ad_chart_from').value = rawChartLabels[startIdx];
+            document.getElementById('ad_chart_to').value = rawChartLabels[rawChartLabels.length - 1];
+
+            renderAdChangesLineChart(
+                rawChartLabels.slice(startIdx),
+                rawChartTotal.slice(startIdx),
+                rawChartAdded.slice(startIdx),
+                rawChartRemoved.slice(startIdx),
+                rawChartLifecycle.slice(startIdx)
+            );
+        }
+
+        // --- NAPI RÉSZLETEZŐ MODÁLIS ABLAK (RENDEZÉS ÉS ÉRTÉKALAPÚ SZŰRŐK) ---
+        async function openDayDetailModal(dateStr, filterType = 'ALL') {
+            activeDayDate = dateStr;
+            activeDayFilterType = filterType;
+            daySortCol = 'timestamp';
+            daySortDir = 'desc';
+
+            document.getElementById('ddm_date').innerText = dateStr;
+            resetDayModalFilterInputs();
+            document.getElementById('dayDetailModal').style.display = 'block';
+            document.getElementById('ddm_events_body').innerHTML = '<tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">Részletes események betöltése...</td></tr>';
+            
+            try {
+                const res = await fetch(`/api/ad-analytics/day-events?date=${encodeURIComponent(dateStr)}&type=ALL`);
+                const data = await res.json();
+                currentDayEvents = data.events || [];
+                
+                // Dropdownok feltöltése a napon létező lehetséges értékek alapján
+                populateDayModalDropdowns(currentDayEvents);
+                updateDayModalCounters();
+                updateSortHeaders();
+                filterDayModalEvents();
+            } catch(err) {
+                document.getElementById('ddm_events_body').innerHTML = `<tr><td colspan="6" style="color:#dc2626; padding:15px;">Hiba az események betöltésekor: ${err}</td></tr>`;
+            }
+        }
+
+        function populateDayModalDropdowns(events) {
+            // 1. Művelet szűrő
+            const selAction = document.getElementById('col_filter_action');
+            if (selAction) {
+                selAction.innerHTML = '<option value="">Mind (Művelet)</option>';
+                const uniqueActions = Array.from(new Set(events.map(e => e.change_type).filter(Boolean))).sort();
+                uniqueActions.forEach(act => {
+                    let label = act;
+                    if (act === 'ADDED_TO_GROUP') label = '➕ Hozzáadás';
+                    else if (act === 'REMOVED_FROM_GROUP') label = '➖ Elvétel';
+                    else if (act === 'USER_DISABLED') label = '🚫 Letiltva';
+                    else if (act === 'USER_ENABLED') label = '✅ Aktiválva';
+                    else if (act === 'STATUS_CHANGED') label = '🔄 Besorolás';
+                    else if (act === 'USER_CREATED') label = '👤 Új fiók';
+                    selAction.innerHTML += `<option value="${act}">${label}</option>`;
+                });
+            }
+
+            // 2. Csoport szűrő
+            const selGroup = document.getElementById('col_filter_group');
+            if (selGroup) {
+                selGroup.innerHTML = '<option value="">Mind (Csoport)</option>';
+                const uniqueGroups = Array.from(new Set(events.map(e => e.group_name).filter(Boolean))).sort();
+                uniqueGroups.forEach(grp => {
+                    selGroup.innerHTML += `<option value="${grp}">${grp}</option>`;
+                });
+            }
+
+            // 3. Forrás szűrő
+            const selSource = document.getElementById('col_filter_source');
+            if (selSource) {
+                selSource.innerHTML = '<option value="">Mind (Forrás)</option>';
+                const uniqueSources = Array.from(new Set(events.map(e => e.source_ref).filter(Boolean))).sort();
+                uniqueSources.forEach(src => {
+                    selSource.innerHTML += `<option value="${src}">${src}</option>`;
+                });
+            }
+        }
+
+        function resetDayModalFilterInputs() {
+            if (document.getElementById('ddm_search')) document.getElementById('ddm_search').value = '';
+            if (document.getElementById('col_filter_time')) document.getElementById('col_filter_time').value = '';
+            if (document.getElementById('col_filter_user')) document.getElementById('col_filter_user').value = '';
+            if (document.getElementById('col_filter_action')) document.getElementById('col_filter_action').value = '';
+            if (document.getElementById('col_filter_group')) document.getElementById('col_filter_group').value = '';
+            if (document.getElementById('col_filter_details')) document.getElementById('col_filter_details').value = '';
+            if (document.getElementById('col_filter_source')) document.getElementById('col_filter_source').value = '';
+        }
+
+        function resetDayModalFilters() {
+            resetDayModalFilterInputs();
+            activeDayFilterType = 'ALL';
+            daySortCol = 'timestamp';
+            daySortDir = 'desc';
+            updateSortHeaders();
+            filterDayModalEvents();
+        }
+
+        function sortDayModal(col) {
+            if (daySortCol === col) {
+                daySortDir = daySortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                daySortCol = col;
+                daySortDir = 'asc';
+            }
+            updateSortHeaders();
+            filterDayModalEvents();
+        }
+
+        function updateSortHeaders() {
+            const cols = ['timestamp', 'entity_name', 'change_type', 'group_name', 'details', 'source_ref'];
+            cols.forEach(c => {
+                const el = document.getElementById('sort_icon_' + c);
+                if (el) {
+                    if (daySortCol === c) {
+                        el.innerText = daySortDir === 'asc' ? ' ▲' : ' ▼';
+                        el.style.color = '#0284c7';
+                    } else {
+                        el.innerText = ' ↕';
+                        el.style.color = '#94a3b8';
+                    }
+                }
+            });
+        }
+
+        function updateDayModalCounters() {
+            const total = currentDayEvents.length;
+            const added = currentDayEvents.filter(e => e.change_type === 'ADDED_TO_GROUP').length;
+            const removed = currentDayEvents.filter(e => e.change_type === 'REMOVED_FROM_GROUP').length;
+            const lifecycle = total - added - removed;
+
+            document.getElementById('btn_ddm_all').innerText = `Mind (${total})`;
+            document.getElementById('btn_ddm_add').innerText = `➕ Csak Hozzáadások (+${added})`;
+            document.getElementById('btn_ddm_rem').innerText = `➖ Csak Elvételek (-${removed})`;
+            document.getElementById('btn_ddm_life').innerText = `👤 Fiók / Státusz (${lifecycle})`;
+            document.getElementById('ddm_total_title').innerText = `${total} db`;
+        }
+
+        function setDayModalFilterType(type) {
+            activeDayFilterType = type;
+            filterDayModalEvents();
+        }
+
+        function filterDayModalEvents() {
+            ['ALL', 'ADDED', 'REMOVED', 'LIFECYCLE'].forEach(t => {
+                const btn = document.getElementById('btn_ddm_' + (t === 'ALL' ? 'all' : (t === 'ADDED' ? 'add' : (t === 'REMOVED' ? 'rem' : 'life'))));
+                if (btn) {
+                    if (activeDayFilterType === t) {
+                        btn.style.background = '#0284c7'; btn.style.color = 'white';
+                    } else {
+                        btn.style.background = '#e2e8f0'; btn.style.color = '#334155';
+                    }
+                }
+            });
+
+            const searchVal = (document.getElementById('ddm_search')?.value || '').toLowerCase().trim();
+            const fTime = (document.getElementById('col_filter_time')?.value || '').toLowerCase().trim();
+            const fUser = (document.getElementById('col_filter_user')?.value || '').toLowerCase().trim();
+            const fAction = (document.getElementById('col_filter_action')?.value || '').trim();
+            const fGroup = (document.getElementById('col_filter_group')?.value || '').toLowerCase().trim();
+            const fDetails = (document.getElementById('col_filter_details')?.value || '').toLowerCase().trim();
+            const fSource = (document.getElementById('col_filter_source')?.value || '').trim();
+
+            const tbody = document.getElementById('ddm_events_body');
+            tbody.innerHTML = '';
+
+            let filtered = currentDayEvents;
+
+            // Felső gomb szerinti szűrés
+            if (activeDayFilterType === 'ADDED') {
+                filtered = filtered.filter(e => e.change_type === 'ADDED_TO_GROUP');
+            } else if (activeDayFilterType === 'REMOVED') {
+                filtered = filtered.filter(e => e.change_type === 'REMOVED_FROM_GROUP');
+            } else if (activeDayFilterType === 'LIFECYCLE') {
+                filtered = filtered.filter(e => e.change_type !== 'ADDED_TO_GROUP' && e.change_type !== 'REMOVED_FROM_GROUP');
+            }
+
+            // Globális kereső
+            if (searchVal) {
+                filtered = filtered.filter(e => 
+                    (e.entity_name && e.entity_name.toLowerCase().includes(searchVal)) ||
+                    (e.group_name && e.group_name.toLowerCase().includes(searchVal)) ||
+                    (e.details && e.details.toLowerCase().includes(searchVal)) ||
+                    (e.source_ref && e.source_ref.toLowerCase().includes(searchVal))
+                );
+            }
+
+            // Oszloponkénti szűrők
+            if (fTime) filtered = filtered.filter(e => (e.timestamp && e.timestamp.toLowerCase().includes(fTime)));
+            if (fUser) filtered = filtered.filter(e => (e.entity_name && e.entity_name.toLowerCase().includes(fUser)));
+            if (fAction) filtered = filtered.filter(e => e.change_type === fAction);
+            if (fGroup) filtered = filtered.filter(e => (e.group_name && e.group_name.toLowerCase() === fGroup));
+            if (fDetails) filtered = filtered.filter(e => (e.details && e.details.toLowerCase().includes(fDetails)));
+            if (fSource) filtered = filtered.filter(e => e.source_ref === fSource);
+
+            // Rendezés az aktuális oszlop szerint
+            filtered.sort((a, b) => {
+                let vA = (a[daySortCol] || '').toString().toLowerCase();
+                let vB = (b[daySortCol] || '').toString().toLowerCase();
+                if (vA < vB) return daySortDir === 'asc' ? -1 : 1;
+                if (vA > vB) return daySortDir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            document.getElementById('ddm_visible_count').innerText = `${filtered.length} / ${currentDayEvents.length} esemény`;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#94a3b8;">Nincs a megadott szűrésnek megfelelő esemény erre a napra.</td></tr>';
+                return;
+            }
+
+            filtered.forEach(e => {
+                let badgeBg = '#2563eb', badgeColor = '#ffffff', actionLabel = e.change_type;
+                if (e.change_type === 'ADDED_TO_GROUP') { badgeBg = '#dcfce7'; badgeColor = '#15803d'; actionLabel = '➕ Hozzáadva'; }
+                else if (e.change_type === 'REMOVED_FROM_GROUP') { badgeBg = '#fee2e2'; badgeColor = '#b91c1c'; actionLabel = '➖ Eltávolítva'; }
+                else if (e.change_type === 'USER_DISABLED') { badgeBg = '#fef2f2'; badgeColor = '#991b1b'; actionLabel = '🚫 Letiltva'; }
+                else if (e.change_type === 'USER_ENABLED') { badgeBg = '#f0fdf4'; badgeColor = '#166534'; actionLabel = '✅ Aktiválva'; }
+                else if (e.change_type === 'STATUS_CHANGED') { badgeBg = '#fef3c7'; badgeColor = '#b45309'; actionLabel = '🔄 Besorolás'; }
+                else if (e.change_type === 'USER_CREATED') { badgeBg = '#e0f2fe'; badgeColor = '#0369a1'; actionLabel = '👤 Létrehozva'; }
+
+                const grpBadge = e.group_name ? `<span class="group-tag" onclick="event.stopPropagation(); closeAllModals(); openGroupModal('${e.group_name}')">${e.group_name}</span>` : '-';
+                const userBadge = `<span class="user-tag" onclick="event.stopPropagation(); closeAllModals(); openUserModal('${e.entity_name}')">👤 ${e.entity_name}</span>`;
+                const srcBadge = `<code style="background:#f1f5f9; padding:2px 5px; border-radius:4px; font-size:11px;">${e.source_ref}</code>`;
+
+                tbody.innerHTML += `<tr>
+                    <td style="white-space:nowrap; color:#64748b;">${e.timestamp}</td>
+                    <td>${userBadge}</td>
+                    <td><span style="background:${badgeBg}; color:${badgeColor}; padding:3px 8px; border-radius:10px; font-weight:bold; font-size:11px;">${actionLabel}</span></td>
+                    <td>${grpBadge}</td>
+                    <td>${e.details}</td>
+                    <td>${srcBadge}</td>
+                </tr>`;
+            });
+        }
+
+        // --- NAPI TÁBLÁZAT MEGJELENÍTÉSE KATTINTHATÓ CELLÁKKAL ---
+        function renderDailyBreakdownTable(dailyList) {
+            const tbody = document.getElementById('dailyBreakdownBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            if (!dailyList || dailyList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:15px;">Nincs elérhető napi változási adat.</td></tr>';
+                return;
+            }
+
+            dailyList.forEach(d => {
+                let uTags = d.affected_users.slice(0, 4).map(u => `<span class="user-tag" onclick="openUserModal('${u}')">${u}</span>`).join(' ');
+                if (d.affected_users.length > 4) uTags += ` <small style="color:#64748b;">+${d.affected_users.length - 4} fő</small>`;
+
+                let gTags = d.affected_groups.slice(0, 3).map(g => `<span class="group-tag" onclick="openGroupModal('${g}')">${g}</span>`).join(' ');
+                if (d.affected_groups.length > 3) gTags += ` <small style="color:#64748b;">+${d.affected_groups.length - 3} db</small>`;
+
+                tbody.innerHTML += `<tr>
+                    <td><b>${d.date}</b></td>
+                    <td><span class="click-num click-num-total" title="Kattintson az összes napi esemény megtekintéséhez" onclick="openDayDetailModal('${d.date}', 'ALL')">${d.total} db</span></td>
+                    <td><span class="click-num click-num-add" title="Kattintson a hozzáadások szűréséhez" onclick="openDayDetailModal('${d.date}', 'ADDED')">+${d.added_to_group}</span></td>
+                    <td><span class="click-num click-num-rem" title="Kattintson az elvételek szűréséhez" onclick="openDayDetailModal('${d.date}', 'REMOVED')">-${d.removed_from_group}</span></td>
+                    <td><span class="click-num click-num-life" title="Kattintson a fiók/státusz változásokhoz" onclick="openDayDetailModal('${d.date}', 'LIFECYCLE')">${d.user_lifecycle}</span></td>
+                    <td>${uTags || '<span style="color:#94a3b8;">-</span>'}</td>
+                    <td>${gTags || '<span style="color:#94a3b8;">-</span>'}</td>
+                </tr>`;
+            });
+        }
+
+        function selectTimeWindow(winKey) {
+            activeWindowKey = winKey;
+            document.querySelectorAll('.window-card').forEach(c => c.classList.remove('active'));
+            const cardEl = document.getElementById('card_' + winKey);
+            if (cardEl) cardEl.classList.add('active');
+
+            const tbody = document.getElementById('timeWindowEventsBody');
+            if (!tbody || !adAnalyticsData) return;
+            tbody.innerHTML = '';
+            const events = adAnalyticsData.windows[winKey] || [];
+            
+            if (events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:15px;">Ebben az időablakban nem történt rögzített változás.</td></tr>';
+                return;
+            }
+
+            events.forEach(e => {
+                let badgeBg = '#2563eb', badgeColor = '#ffffff', actionLabel = e.change_type;
+                if (e.change_type === 'ADDED_TO_GROUP') { badgeBg = '#dcfce7'; badgeColor = '#15803d'; actionLabel = '➕ Hozzáadva'; }
+                else if (e.change_type === 'REMOVED_FROM_GROUP') { badgeBg = '#fee2e2'; badgeColor = '#b91c1c'; actionLabel = '➖ Eltávolítva'; }
+                else if (e.change_type === 'USER_DISABLED') { badgeBg = '#fef2f2'; badgeColor = '#991b1b'; actionLabel = '🚫 Letiltva'; }
+                else if (e.change_type === 'USER_ENABLED') { badgeBg = '#f0fdf4'; badgeColor = '#166534'; actionLabel = '✅ Aktiválva'; }
+                else if (e.change_type === 'STATUS_CHANGED') { badgeBg = '#fef3c7'; badgeColor = '#b45309'; actionLabel = '🔄 Besorolás'; }
+                else if (e.change_type === 'USER_CREATED') { badgeBg = '#e0f2fe'; badgeColor = '#0369a1'; actionLabel = '👤 Létrehozva'; }
+
+                const grpBadge = e.group_name ? `<span class="group-tag" onclick="openGroupModal('${e.group_name}')">${e.group_name}</span>` : '-';
+                const srcBadge = `<code style="background:#f1f5f9; padding:2px 5px; border-radius:4px; font-size:11px;">${e.source_ref}</code>`;
+
+                tbody.innerHTML += `<tr>
+                    <td style="white-space:nowrap; color:#64748b;">${e.timestamp}</td>
+                    <td><b style="color:#0f172a; cursor:pointer;" onclick="openUserModal('${e.entity_name}')">👤 ${e.entity_name}</b></td>
+                    <td><span style="background:${badgeBg}; color:${badgeColor}; padding:3px 8px; border-radius:10px; font-weight:bold; font-size:11px;">${actionLabel}</span></td>
+                    <td>${grpBadge}</td>
+                    <td>${e.details}</td>
+                    <td>${srcBadge}</td>
+                </tr>`;
+            });
+        }
+
+        function setAdPrompt(txt) { document.getElementById('adChangesUserPrompt').value = txt; }
+
+        async function sendAdChangesAiQuestion() {
+            const model = document.getElementById('adChangesModelSelect').value;
+            const promptBox = document.getElementById('adChangesUserPrompt');
+            const txt = promptBox.value.trim();
+            if (!model || !txt) return;
+
+            const chatBox = document.getElementById('adChangesChatBox');
+            chatBox.innerHTML += `<div style="align-self:flex-end; background:#0284c7; color:white; padding:8px 12px; border-radius:8px; margin:4px 0; max-width:80%; font-size:13px;">${txt}</div>`;
+            promptBox.value = '';
+
+            const aiDiv = document.createElement('div');
+            aiDiv.style = 'align-self:flex-start; background:#f1f5f9; padding:8px 12px; border-radius:8px; margin:4px 0; max-width:80%; font-size:13px;';
+            aiDiv.innerText = '🔍 Időablakok, csoportmozgások és jogosultságok elemzése...';
+            chatBox.appendChild(aiDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const res = await fetch('/api/ad-analytics/ask', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ model: model, prompt: txt })
+                });
+                const d = await res.json();
+                aiDiv.innerText = d.status === 'SUCCESS' ? d.response : ('Hiba: ' + d.message);
+            } catch(err) {
+                aiDiv.innerText = 'Hiba: ' + err;
+            }
+        }
+
+        // --- TELEMETRIA, MUNKAMENETEK ÉS WEB AUDIT ---
         async function loadSessionsData() {
             try {
                 const res = await fetch('/api/telemetry/sessions');
                 const d = await res.json();
-                
-                // 1. Aktuális belépés
                 if (d.current_session) {
                     const c = d.current_session;
                     document.getElementById('cur_sess_user').innerText = c.username;
@@ -111,8 +650,6 @@
                     document.getElementById('cur_sess_ip').innerText = c.client_ip + ' — ' + c.location;
                     document.getElementById('cur_sess_device').innerText = c.device_type + ' | ' + c.browser + ' | ' + c.os_name;
                 }
-
-                // 2. Egyéb aktív belépők
                 const tbody = document.getElementById('otherSessionsBody');
                 if (tbody) {
                     tbody.innerHTML = '';
@@ -121,20 +658,19 @@
                         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:12px;">Jelenleg nincs más aktív felhasználó bejelentkezve a felületre.</td></tr>';
                     } else {
                         others.forEach(o => {
-                            tbody.innerHTML += '<tr>' +
-                                '<td><b style="color:#0284c7;">' + o.username + '</b></td>' +
-                                '<td><code>' + o.client_ip + '</code><br/><small style="color:#64748b;">' + o.location + '</small></td>' +
-                                '<td>' + o.browser + ' (' + o.os_name + ')</td>' +
-                                '<td>' + o.login_time + '<br/><small style="color:#64748b;">' + o.active_duration + '</small></td>' +
-                                '<td><span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:11px;">🟢 ' + o.last_activity + '</span></td>' +
-                            '</tr>';
+                            tbody.innerHTML += `<tr>
+                                <td><b style="color:#0284c7;">${o.username}</b></td>
+                                <td><code>${o.client_ip}</code><br/><small style="color:#64748b;">${o.location}</small></td>
+                                <td>${o.browser} (${o.os_name})</td>
+                                <td>${o.login_time}<br/><small style="color:#64748b;">${o.active_duration}</small></td>
+                                <td><span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:11px;">🟢 ${o.last_activity}</span></td>
+                            </tr>`;
                         });
                     }
                 }
             } catch(e) {}
         }
 
-        // --- TELEMETRIA & ERŐFORRÁS MÉRÉS ---
         async function loadTelemetryLive() {
             try {
                 const res = await fetch('/api/telemetry/live');
@@ -282,19 +818,19 @@
             if (!tbody) return;
             tbody.innerHTML = '';
             if (!list || list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:15px;">Még nincs rögzített adat. Kattintson a fenti kék gombra!</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:15px;">Még nincs rögzített adat.</td></tr>';
                 return;
             }
             [...list].reverse().slice(0, 30).forEach(r => {
-                tbody.innerHTML += '<tr>' +
-                    '<td><b>' + r.timestamp + '</b></td>' +
-                    '<td>' + r.cpu_percent + ' % ' + (r.cpu_temp_c ? ' (' + r.cpu_temp_c + ' °C)' : '') + '</td>' +
-                    '<td>' + Math.round(r.ram_used_mb) + ' MB (' + r.ram_percent + '%)</td>' +
-                    '<td>' + r.disk_free_gb + ' GB</td>' +
-                    '<td><b>' + r.db_size_mb + ' MB</b></td>' +
-                    '<td>' + (r.gpu_name !== 'N/A' ? (r.gpu_util_percent + '% | ' + Math.round(r.gpu_mem_used_mb) + 'MB') : '-') + '</td>' +
-                    '<td>' + (r.llm_tokens_total || 0).toLocaleString() + ' db</td>' +
-                '</tr>';
+                tbody.innerHTML += `<tr>
+                    <td><b>${r.timestamp}</b></td>
+                    <td>${r.cpu_percent} % ${r.cpu_temp_c ? ` (${r.cpu_temp_c} °C)` : ''}</td>
+                    <td>${Math.round(r.ram_used_mb)} MB (${r.ram_percent}%)</td>
+                    <td>${r.disk_free_gb} GB</td>
+                    <td><b>${r.db_size_mb} MB</b></td>
+                    <td>${r.gpu_name !== 'N/A' ? `${r.gpu_util_percent}% | ${Math.round(r.gpu_mem_used_mb)}MB` : '-'}</td>
+                    <td>${(r.llm_tokens_total || 0).toLocaleString()} db</td>
+                </tr>`;
             });
         }
 
@@ -318,25 +854,20 @@
                     if (l.device_type === 'Mobiltelefon') devIcon = '📱';
                     else if (l.device_type && l.device_type.includes('Tablet')) devIcon = '📟';
 
-                    const clientInfo = '<span style="background:#f1f5f9; color:#334155; padding:2px 6px; border-radius:4px; font-weight:600; font-size:11px;">' + devIcon + ' ' + l.browser + '</span> ' +
-                                       '<span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:11px;">' + l.os_name + '</span>';
+                    const clientInfo = `<span style="background:#f1f5f9; color:#334155; padding:2px 6px; border-radius:4px; font-weight:600; font-size:11px;">${devIcon} ${l.browser}</span> <span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:11px;">${l.os_name}</span>`;
+                    const ipInfo = `<code style="background:#f8fafc; border:1px solid #e2e8f0; padding:2px 5px; border-radius:4px; font-weight:bold;">${l.client_ip}</code><br/><small style="color:#64748b;">📍 ${l.location}</small>`;
 
-                    const ipInfo = '<code style="background:#f8fafc; border:1px solid #e2e8f0; padding:2px 5px; border-radius:4px; font-weight:bold;">' + l.client_ip + '</code><br/>' +
-                                   '<small style="color:#64748b;">📍 ' + l.location + '</small>';
-
-                    tbody.innerHTML += '<tr>' +
-                        '<td style="white-space:nowrap; color:#64748b;">' + l.timestamp + '</td>' +
-                        '<td><b>' + l.username + '</b></td>' +
-                        '<td>' + ipInfo + '</td>' +
-                        '<td>' + clientInfo + '</td>' +
-                        '<td><b>' + l.action + '</b></td>' +
-                        '<td>' + l.details + '</td>' +
-                        '<td><span style="background:' + stBg + '; color:' + stColor + '; padding:3px 8px; border-radius:10px; font-weight:bold; font-size:11px;">' + l.status + '</span></td>' +
-                    '</tr>';
+                    tbody.innerHTML += `<tr>
+                        <td style="white-space:nowrap; color:#64748b;">${l.timestamp}</td>
+                        <td><b>${l.username}</b></td>
+                        <td>${ipInfo}</td>
+                        <td>${clientInfo}</td>
+                        <td><b>${l.action}</b></td>
+                        <td>${l.details}</td>
+                        <td><span style="background:${stBg}; color:${stColor}; padding:3px 8px; border-radius:10px; font-weight:bold; font-size:11px;">${l.status}</span></td>
+                    </tr>`;
                 });
-            } catch(e) {
-                tbody.innerHTML = '<tr><td colspan="7" style="color:#dc2626; padding:10px;">Hiba: ' + e + '</td></tr>';
-            }
+            } catch(e) {}
         }
 
         async function loadHostIpHistory() {
@@ -352,7 +883,7 @@
                     return;
                 }
                 history.forEach(h => {
-                    tbody.innerHTML += '<tr><td>' + h.timestamp + '</td><td><code style="font-weight:bold; color:#0369a1;">' + h.ip_address + '</code></td><td>' + h.hostname + '</td><td>' + h.details + '</td></tr>';
+                    tbody.innerHTML += `<tr><td>${h.timestamp}</td><td><code style="font-weight:bold; color:#0369a1;">${h.ip_address}</code></td><td>${h.hostname}</td><td>${h.details}</td></tr>`;
                 });
             } catch(e) {}
         }
@@ -371,22 +902,22 @@
                     return;
                 }
                 data.backups.forEach(b => {
-                    tbody.innerHTML += '<tr>' +
-                        '<td><b>' + b.created_at + '</b></td>' +
-                        '<td><span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-weight:bold;">' + b.version + '</span></td>' +
-                        '<td><code style="font-size:12px;">' + b.filename + '</code></td>' +
-                        '<td>' + b.size + '</td>' +
-                        '<td>' + b.comment + '</td>' +
-                        '<td><small style="color:#64748b;">' + b.author + '</small></td>' +
-                        '<td style="white-space:nowrap;">' +
-                            '<button class="btn-restore" onclick="restoreBackup(\'' + b.filename + '\')">Visszaállítás</button>' +
-                            '<a class="btn-download" href="/api/backups/download/' + b.filename + '">Letöltés</a>' +
-                            '<button class="btn-delete" onclick="deleteBackup(\'' + b.filename + '\')">Törlés</button>' +
-                        '</td>' +
-                    '</tr>';
+                    tbody.innerHTML += `<tr>
+                        <td><b>${b.created_at}</b></td>
+                        <td><span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-weight:bold;">${b.version}</span></td>
+                        <td><code style="font-size:12px;">${b.filename}</code></td>
+                        <td>${b.size}</td>
+                        <td>${b.comment}</td>
+                        <td><small style="color:#64748b;">${b.author}</small></td>
+                        <td style="white-space:nowrap;">
+                            <button class="btn-restore" onclick="restoreBackup('${b.filename}')">Visszaállítás</button>
+                            <a class="btn-download" href="/api/backups/download/${b.filename}">Letöltés</a>
+                            <button class="btn-delete" onclick="deleteBackup('${b.filename}')">Törlés</button>
+                        </td>
+                    </tr>`;
                 });
             } catch(e) {
-                tbody.innerHTML = '<tr><td colspan="7" style="color:#dc2626;">Hiba: ' + e + '</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="7" style="color:#dc2626;">Hiba: ${e}</td></tr>`;
             }
         }
 
@@ -462,10 +993,10 @@
                 else if (u.status === 'Távozottak' || !u.enabled) { badgeColor = '#b91c1c'; badgeBg = '#fee2e2'; }
                 else if (u.status === 'Hosszútávúszabadság') { badgeColor = '#6d28d9'; badgeBg = '#ede9fe'; }
                 
-                const stBadge = '<span style="background:' + badgeBg + '; color:' + badgeColor + '; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:bold;">' + u.status + '</span>';
-                const srcBadge = '<span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-size:10px; font-family:monospace;">' + (u.source_ref || 'AD') + '</span>';
+                const stBadge = `<span style="background:${badgeBg}; color:${badgeColor}; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:bold;">${u.status}</span>`;
+                const srcBadge = `<span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-size:10px; font-family:monospace;">${u.source_ref || 'AD'}</span>`;
 
-                tr.innerHTML = '<td><b>' + u.name + '</b> ' + srcBadge + '</td><td>' + u.sam + '</td><td>' + u.mail + '</td><td>' + stBadge + '</td><td>' + u.title + '</td><td>' + u.last_logon + '</td>';
+                tr.innerHTML = `<td><b>${u.name}</b> ${srcBadge}</td><td>${u.sam}</td><td>${u.mail}</td><td>${stBadge}</td><td>${u.title}</td><td>${u.last_logon}</td>`;
                 tbody.appendChild(tr);
             });
             document.getElementById('userCountLabel').innerText = 'Találat: ' + usersList.length + ' fiók (150 megjelenítve)';
@@ -513,7 +1044,7 @@
             let gHtml = '';
             if (u.groups && u.groups.length > 0) {
                 u.groups.forEach(g => {
-                    gHtml += '<span class="group-tag" onclick="event.stopPropagation(); openGroupModal(\'' + g.name + '\')">' + g.name + '</span> ';
+                    gHtml += `<span class="group-tag" onclick="event.stopPropagation(); openGroupModal('${g.name}')">${g.name}</span> `;
                 });
             } else { gHtml = '<span style="color:#64748b;">Nincs csoporttagság</span>'; }
             document.getElementById('m-groups').innerHTML = gHtml;
@@ -529,8 +1060,8 @@
                     }
                     let hHtml = '<table style="margin:0; width:100%; font-size:12px;"><tbody>';
                     data.forEach(item => {
-                        const sRef = item.source_ref ? '<code style="font-size:10px; background:#f1f5f9; padding:2px 4px; border-radius:3px; margin-left:6px;">' + item.source_ref + '</code>' : '';
-                        hHtml += '<tr><td style="width:140px; color:#64748b;">' + item.timestamp + '</td><td><b>' + item.change_type + '</b>' + sRef + '</td><td>' + item.details + '</td></tr>';
+                        const sRef = item.source_ref ? `<code style="font-size:10px; background:#f1f5f9; padding:2px 4px; border-radius:3px; margin-left:6px;">${item.source_ref}</code>` : '';
+                        hHtml += `<tr><td style="width:140px; color:#64748b;">${item.timestamp}</td><td><b>${item.change_type}</b>${sRef}</td><td>${item.details}</td></tr>`;
                     });
                     hHtml += '</tbody></table>';
                     histBox.innerHTML = hHtml;
@@ -553,7 +1084,7 @@
             let mHtml = '';
             if (g.members && g.members.length > 0) {
                 g.members.forEach(m => {
-                    mHtml += '<span class="user-tag" onclick="event.stopPropagation(); openUserModal(\'' + m + '\')">👤 ' + m + '</span> ';
+                    mHtml += `<span class="user-tag" onclick="event.stopPropagation(); openUserModal('${m}')">👤 ${m}</span> `;
                 });
             } else { mHtml = '<span style="color:#64748b;">A csoport üres.</span>'; }
             document.getElementById('g-members').innerHTML = mHtml;
@@ -563,14 +1094,15 @@
         function closeAllModals() { 
             document.getElementById('userModal').style.display = 'none'; 
             document.getElementById('groupModal').style.display = 'none';
+            document.getElementById('dayDetailModal').style.display = 'none';
         }
         window.onclick = function(e) {
-            if (e.target == document.getElementById('userModal') || e.target == document.getElementById('groupModal')) closeAllModals();
+            if (e.target == document.getElementById('userModal') || e.target == document.getElementById('groupModal') || e.target == document.getElementById('dayDetailModal')) closeAllModals();
         }
 
-        // --- AI ASSZISZTENS ---
-        async function loadAiModels() {
-            const select = document.getElementById('modelSelect');
+        // --- AI MODELL BETÖLTŐ HELPER ---
+        async function loadAiModels(elementId) {
+            const select = document.getElementById(elementId);
             if (!select || select.children.length > 1) return;
             try {
                 const res = await fetch('/api/ai/models');
@@ -593,7 +1125,7 @@
             if (!model || !txt) return;
 
             const chatBox = document.getElementById('chatBox');
-            chatBox.innerHTML += '<div style="align-self:flex-end; background:#0284c7; color:white; padding:8px 12px; border-radius:8px; margin:4px 0; max-width:80%; font-size:13px;">' + txt + '</div>';
+            chatBox.innerHTML += `<div style="align-self:flex-end; background:#0284c7; color:white; padding:8px 12px; border-radius:8px; margin:4px 0; max-width:80%; font-size:13px;">${txt}</div>`;
             promptBox.value = '';
 
             const aiDiv = document.createElement('div');
@@ -641,7 +1173,7 @@
                     document.getElementById('history_scan_info').innerHTML = '🖥️ <b>' + data.total_snapshots + ' db mentési csomag</b> a szerveren.';
                     tbody.innerHTML = '';
                     (data.snapshots || []).forEach(s => {
-                        tbody.innerHTML += '<tr><td><b>' + s.datetime + '</b></td><td><code>' + s.timestamp + '</code></td><td>' + s.user_files_count + ' db fájl</td><td>' + (s.has_groups ? '✅ Igen' : '❌ Nincs') + '</td></tr>';
+                        tbody.innerHTML += `<tr><td><b>${s.datetime}</b></td><td><code>${s.timestamp}</code></td><td>${s.user_files_count} db fájl</td><td>${s.has_groups ? '✅ Igen' : '❌ Nincs'}</td></tr>`;
                     });
                     document.getElementById('startHistoryBtn').disabled = false;
                 }
@@ -686,7 +1218,7 @@
                 if (data.status === 'SUCCESS' && Array.isArray(data.data)) {
                     box.innerHTML = '';
                     data.data.forEach(item => {
-                        box.innerHTML += '<div style="border-bottom:1px solid #cbd5e1; padding:5px 0;"><strong>' + item.message + '</strong><br/><small style="color:#64748b;">' + item.date + ' | ' + item.author + '</small></div>';
+                        box.innerHTML += `<div style="border-bottom:1px solid #cbd5e1; padding:5px 0;"><strong>${item.message}</strong><br/><small style="color:#64748b;">${item.date} | ${item.author}</small></div>`;
                     });
                 }
             } catch(e) {}
@@ -741,6 +1273,7 @@
         <div class="tabs">
             <div id="tab-dashboard" class="tab active" onclick="switchTab('dashboard')">Jogosultság Változások</div>
             <div id="tab-users" class="tab" onclick="switchTab('users')">Felhasználók és Csoportok</div>
+            <div id="tab-ad-changes" class="tab" onclick="switchTab('ad-changes')">📅 AD Változás Elemző</div>
             <div id="tab-telemetry" class="tab" onclick="switchTab('telemetry')">📊 Telemetria & Rendszerállapot</div>
             <div id="tab-sync-history" class="tab" onclick="switchTab('sync-history')">Szinkronizálási Napló</div>
             <div id="tab-ai" class="tab" onclick="switchTab('ai')">AI Elemző & Asszisztens</div>
@@ -772,7 +1305,148 @@
             </table>
         </div>
 
-        <!-- 3. TELEMETRIA & RENDSZERÁLLAPOT -->
+        <!-- 3. AD VÁLTOZÁS ELEMZŐ FÜL -->
+        <div id="content-ad-changes" class="content">
+            <div style="margin-bottom:15px;">
+                <h3 style="margin:0 0 4px 0;">Active Directory Változás- és Jogosultságelemző Központ</h3>
+                <small style="color:#64748b;">Letisztázott adatok (CSV import és élő AD közötti anomáliáktól mentesítve) | Kattintható darabszámok és interaktív idővonal</small>
+            </div>
+
+            <!-- 4 IDŐABLAK KÁRTYA -->
+            <div class="window-cards">
+                <div id="card_w_24h" class="window-card active" onclick="selectTimeWindow('w_24h')">
+                    <div class="w-label">🕒 Elmúlt 24 Óra</div>
+                    <div class="w-val" id="card_val_24h">- db</div>
+                    <div class="w-desc">Legfrissebb fiók- és csoportmozgások</div>
+                </div>
+                <div id="card_w_72h" class="window-card" onclick="selectTimeWindow('w_72h')">
+                    <div class="w-label">🕒 Elmúlt 72 Óra</div>
+                    <div class="w-val" id="card_val_72h">- db</div>
+                    <div class="w-desc">Hétvégi vagy 3 napos változások</div>
+                </div>
+                <div id="card_w_168h" class="window-card" onclick="selectTimeWindow('w_168h')">
+                    <div class="w-label">🕒 Elmúlt 168 Óra (7 Nap)</div>
+                    <div class="w-val" id="card_val_168h">- db</div>
+                    <div class="w-desc">Heti összesített jogosultsági mozgások</div>
+                </div>
+                <div id="card_w_30d" class="window-card" onclick="selectTimeWindow('w_30d')">
+                    <div class="w-label">📅 Elmúlt 30 Nap</div>
+                    <div class="w-val" id="card_val_30d">- db</div>
+                    <div class="w-desc">Havi teljes fluktuáció és trend</div>
+                </div>
+            </div>
+
+            <!-- INTERAKTÍV 3-VONALAS GRAFIKON DÁTUMSZŰRŐVEL ÉS ZOOMMAL -->
+            <div class="card-box" style="margin-bottom:20px; background:white;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                    <h4 style="margin:0; border:none; padding:0;">📈 Napi AD Változások Idővonala (Vonaldiagram)</h4>
+                    
+                    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                        <span style="font-size:12px; color:#64748b;">Tól:</span>
+                        <input type="date" id="ad_chart_from" style="width:130px; padding:4px 8px; margin:0; font-size:12px;">
+                        <span style="font-size:12px; color:#64748b;">Ig:</span>
+                        <input type="date" id="ad_chart_to" style="width:130px; padding:4px 8px; margin:0; font-size:12px;">
+                        <button class="btn" style="padding:4px 10px; font-size:12px;" onclick="applyAdChartDateFilter()">Szűrés</button>
+                        
+                        <span style="border-left:1px solid #cbd5e1; height:20px; margin:0 4px;"></span>
+                        
+                        <button class="btn" style="background:#f1f5f9; color:#334155; padding:4px 8px; font-size:11.5px;" onclick="setAdChartRange(7)">7 nap</button>
+                        <button class="btn" style="background:#f1f5f9; color:#334155; padding:4px 8px; font-size:11.5px;" onclick="setAdChartRange(14)">14 nap</button>
+                        <button class="btn" style="background:#f1f5f9; color:#334155; padding:4px 8px; font-size:11.5px;" onclick="setAdChartRange(30)">30 nap</button>
+                        <button class="btn" style="background:#e0f2fe; color:#0369a1; padding:4px 8px; font-size:11.5px;" onclick="setAdChartRange('all')">Mind</button>
+                        <button class="btn" style="background:#475569; color:white; padding:4px 8px; font-size:11.5px;" onclick="resetAdChartZoom()">🔍 Zoom Visszaállítás</button>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:25px; margin-bottom:12px; font-size:12.5px; background:#f8fafc; padding:8px 15px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <div>🏆 <b>Legnagyobb csúcs (Peak):</b> <span id="ad_chart_peak" style="font-weight:bold; color:#0284c7;">-</span></div>
+                    <div>📉 <b>Legalacsonyabb aktív nap:</b> <span id="ad_chart_min" style="font-weight:bold; color:#64748b;">-</span></div>
+                    <div>📊 <b>Napi átlag:</b> <span id="ad_chart_avg" style="font-weight:bold; color:#16a34a;">-</span></div>
+                    <div style="margin-left:auto; color:#64748b; font-style:italic;">💡 Görgessen a nagyításhoz, húzza a mozgatáshoz, vagy kattintson egy pontra!</div>
+                </div>
+
+                <div style="height:300px;"><canvas id="chartAdDailyChanges"></canvas></div>
+            </div>
+
+            <!-- KIVÁLASZTOTT IDŐABLAK ESEMÉNYEI TÁBLÁZAT -->
+            <div class="card-box">
+                <h4 style="margin-top:0;">📋 Kiválasztott Időablak Eseményei (Kik milyen csoportot kaptak vagy vesztettek el?)</h4>
+                <div class="scroll-box" style="max-height:280px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Időpont</th>
+                                <th>Érintett Felhasználó</th>
+                                <th>Művelet</th>
+                                <th>Érintett Csoport</th>
+                                <th>Részletek</th>
+                                <th>Forrás</th>
+                            </tr>
+                        </thead>
+                        <tbody id="timeWindowEventsBody">
+                            <tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:15px;">Betöltés folyamatban...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- NAPI LEBONTÁS TÁBLÁZAT (KATTINTHATÓ DB SZÁMOKKAL) -->
+            <div class="card-box">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <h4 style="margin:0; border:none; padding:0;">📅 Napi Összesítő és Érintett Fiókok / Csoportok Listája</h4>
+                    <small style="color:#0284c7; font-weight:bold;">💡 Kattintson a darabszámokra a részletes napi lista megnyitásához!</small>
+                </div>
+                <div class="scroll-box" style="max-height:320px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Dátum</th>
+                                <th>Összes változás</th>
+                                <th>Hozzáadva</th>
+                                <th>Elvéve</th>
+                                <th>Fiók / Státusz</th>
+                                <th>Érintett Felhasználók</th>
+                                <th>Érintett Csoportok</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dailyBreakdownBody">
+                            <tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:15px;">Betöltés folyamatban...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- DEDIKÁLT AD VÁLTOZÁS LLM ASSZISZTENS -->
+            <div class="card-box" style="border-left: 4px solid #0284c7; background: #ffffff;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4 style="margin:0;">🤖 AD Változás AI Szakértő (Kérdezz a csoportmozgásokról, elvételekről, anomáliákról)</h4>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:12px; color:#64748b;">Modell:</span>
+                        <select id="adChangesModelSelect" style="max-width:220px; margin:0;"><option value="">Modell betöltése...</option></select>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+                    <button class="btn" style="background:#e0f2fe; color:#0369a1; padding:5px 10px; font-size:12px;" onclick="setAdPrompt('Kik kaptak új csoporttagságot az elmúlt 24 órában?')">🕒 24 óra új csoporttagságai</button>
+                    <button class="btn" style="background:#e0f2fe; color:#0369a1; padding:5px 10px; font-size:12px;" onclick="setAdPrompt('Kik vesztettek el jogosultságot vagy csoporttagságot az elmúlt 168 órában (7 nap)?')">➖ 7 napos jogosultság-elvételek</button>
+                    <button class="btn" style="background:#e0f2fe; color:#0369a1; padding:5px 10px; font-size:12px;" onclick="setAdPrompt('Melyik napon volt kiugró változás (spikes) és melyik csoportokat/usereket érintette?')">📈 Kiugró napok (spikes) elemzése</button>
+                    <button class="btn" style="background:#e0f2fe; color:#0369a1; padding:5px 10px; font-size:12px;" onclick="setAdPrompt('Voltak-e gyanús, szokatlan vagy hétvégi időpontban történt jogosultság-módosítások?')">⚠️ Gyanús / hétvégi változások</button>
+                </div>
+
+                <div id="adChangesChatBox" style="height:250px; border:1px solid #cbd5e1; border-radius:6px; padding:12px; overflow-y:auto; background:#f8fafc; display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+                    <div style="align-self:flex-start; background:white; border:1px solid #e2e8f0; padding:8px 12px; border-radius:8px; font-size:13px;">
+                        Üdvözlöm! Én az Active Directory változáselemzője vagyok. Rendelkezésemre áll az összes letisztázott napi bontás, az érintett felhasználók és csoportok listája, valamint a 24h, 72h, 168h és 30 napos ablakok. Miben segíthetek?
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <textarea id="adChangesUserPrompt" placeholder="Kérdezzen bátran az AD változásokról, hozzáadásokról, elvételekről..." style="height:45px; margin:0;"></textarea>
+                    <button class="btn" onclick="sendAdChangesAiQuestion()">Küldés</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. TELEMETRIA & RENDSZERÁLLAPOT -->
         <div id="content-telemetry" class="content">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <div>
@@ -782,9 +1456,8 @@
                 <button id="collectTelBtn" class="btn" onclick="triggerTelemetryCollect()">⚡ Azonnali Mérés Rögzítése</button>
             </div>
 
-            <!-- AKTÍV MUNKAMENETEK SZEKCIÓ (JELENLEGI GÉP ÉS EGYÉB BELÉPŐK) -->
+            <!-- AKTÍV MUNKAMENETEK SZEKCIÓ -->
             <div style="display:grid; grid-template-columns: 1fr 1.3fr; gap:15px; margin-bottom:20px;">
-                <!-- Kártya 1: Jelenlegi Belépésed -->
                 <div class="telemetry-card" style="border-left: 4px solid #16a34a; background:#f0fdf4;">
                     <div class="title" style="color:#15803d;">👤 Jelenlegi Munkameneted (Aktuális Belépés)</div>
                     <div class="data-row"><strong>Bejelentkezve:</strong><b id="cur_sess_user" style="color:#0f172a;">-</b></div>
@@ -793,7 +1466,6 @@
                     <div class="data-row"><strong>Böngésző & Eszköz:</strong><span id="cur_sess_device">-</span></div>
                 </div>
 
-                <!-- Kártya 2: Jelenleg Aktív Egyéb Munkamenetek -->
                 <div class="telemetry-card" style="border-left: 4px solid #0284c7;">
                     <div class="title" style="color:#0369a1;">👥 Jelenleg Aktív Egyéb Munkamenetek (Ki van még belépve?)</div>
                     <div style="max-height:130px; overflow-y:auto; margin-top:6px;">
@@ -880,7 +1552,7 @@
                 </div>
             </div>
 
-            <!-- 1. TÁBLÁZAT: BŐVÍTETT WEB BELÉPÉSI ÉS TEVÉKENYSÉG NAPLÓ -->
+            <!-- WEBES BELÉPÉSI NAPLÓ -->
             <div class="card-box">
                 <h4 style="margin-top:0;">🛡️ Webes Belépési és Tevékenységi Napló (Böngésző, OS, Kliens IP & Hálózat)</h4>
                 <div class="scroll-box">
@@ -903,30 +1575,7 @@
                 </div>
             </div>
 
-            <!-- 2. TÁBLÁZAT: RENDSZER TELEMETRIA IDŐSOROS TÁBLÁZAT -->
-            <div class="card-box">
-                <h4 style="margin-top:0;">📈 Hardver & Rendszer Telemetria Idősoros Adatok (PostgreSQL)</h4>
-                <div class="scroll-box">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Időpont</th>
-                                <th>CPU (%) & Hőfok</th>
-                                <th>RAM (MB / %)</th>
-                                <th>Szabad Tárhely</th>
-                                <th>PostgreSQL DB</th>
-                                <th>GPU Terhelés & VRAM</th>
-                                <th>LLM Tokenek</th>
-                            </tr>
-                        </thead>
-                        <tbody id="telemetryTableBody">
-                            <tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:15px;">Betöltés folyamatban...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- 3. TÁBLÁZAT: GAZDAGÉP IP ÉS DHCP VÁLTOZÁSTÖRTÉNET -->
+            <!-- GAZDAGÉP IP NAPLÓ -->
             <div class="card-box">
                 <h4 style="margin-top:0;">🌐 Gazdagép (Host) IP Cím & DHCP Változástörténet</h4>
                 <div class="scroll-box" style="max-height:160px;">
@@ -947,7 +1596,7 @@
             </div>
         </div>
 
-        <!-- 4. SZINKRONIZÁLÁSI NAPLÓ -->
+        <!-- 5. SZINKRONIZÁLÁSI NAPLÓ -->
         <div id="content-sync-history" class="content">
             <table>
                 <thead><tr><th>Indítás</th><th>Befejezés</th><th>Időtartam</th><th>Kiváltó ok</th><th>Státusz</th><th>Változások</th></tr></thead>
@@ -955,7 +1604,7 @@
             </table>
         </div>
 
-        <!-- 5. AI ASSZISZTENS (INTELLIGENS MÉRÉSI ÉS BELÉPÉSI KORRELÁCIÓVAL) -->
+        <!-- 6. ÁLTALÁNOS AI ASSZISZTENS -->
         <div id="content-ai" class="content">
             <div class="card-box" style="display:flex; gap:15px; align-items:center;">
                 <b>Válasszon AI modellt:</b>
@@ -970,7 +1619,7 @@
             </div>
             <div id="chatBox" style="height:320px; border:1px solid #cbd5e1; border-radius:6px; padding:15px; overflow-y:auto; background:white; display:flex; flex-direction:column; gap:8px;">
                 <div style="align-self:flex-start; background:#f1f5f9; padding:8px 12px; border-radius:8px; font-size:13px;">
-                    Üdvözlöm! Közvetlen hozzáférésem van az összes kiexportált sémához, a hardveres telemetria (CPU, RAM, GPU, Tárhely) minimum és maximum adataihoz, a webes belépésekhez és a futó háttérfolyamatokhoz. Kérdezzen bátran összefüggéseket!
+                    Üdvözlöm! Közvetlen hozzáférésem van az összes kiexportált sémához, a hardveres telemetria minimum és maximum adataihoz, a webes belépésekhez és a futó háttérfolyamatokhoz. Kérdezzen bátran összefüggéseket!
                 </div>
             </div>
             <div style="display:flex; gap:10px; margin-top:10px;">
@@ -979,7 +1628,7 @@
             </div>
         </div>
 
-        <!-- 6. TÖRTÉNETI IDŐGÉP (CSV IMPORT) -->
+        <!-- 7. TÖRTÉNETI IDŐGÉP (CSV IMPORT) -->
         <div id="content-history-import" class="content">
             <div class="card-box">
                 <h4>PowerShell CSV Mentések Betöltése</h4>
@@ -1000,7 +1649,7 @@
             </table>
         </div>
 
-        <!-- 7. MENTÉSEK & VERZIÓK -->
+        <!-- 8. MENTÉSEK & VERZIÓK -->
         <div id="content-backups" class="content">
             <div class="card-box">
                 <h4>Új Teljes Biztonsági Mentés Készítése</h4>
@@ -1025,7 +1674,7 @@
             </table>
         </div>
 
-        <!-- 8. BEÁLLÍTÁSOK -->
+        <!-- 9. BEÁLLÍTÁSOK -->
         <div id="content-settings" class="content">
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
                 <div class="card-box">
@@ -1052,6 +1701,73 @@
                     </div>
                     <div id="gh_history_list" style="margin-top:10px; max-height:130px; overflow-y:auto; font-size:12px;"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NAPI RÉSZLETES VÁLTOZÁSOK MODAL (RENDEZHETŐ ÉS SZŰRHETŐ FEJLÉCCEL) -->
+    <div id="dayDetailModal" class="modal">
+        <div class="modal-content" style="max-width:1150px;">
+            <span class="close" onclick="closeAllModals()">&times;</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:10px; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                <h2 style="margin:0;">📅 <span id="ddm_date">2026-10-21</span> — Részletes Események (<span id="ddm_total_title" style="color:#0284c7;">-</span>)</h2>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="ddm_search" placeholder="Gyorskeresés bárhol..." style="width:240px; margin:0;" onkeyup="filterDayModalEvents()">
+                    <button class="btn" style="background:#64748b; padding:6px 12px; font-size:12px; white-space:nowrap;" onclick="resetDayModalFilters()">🔄 Szűrők törlése</button>
+                </div>
+            </div>
+
+            <!-- Típusválasztó gombok és találati számláló a modálban -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="btn_ddm_all" class="btn" onclick="setDayModalFilterType('ALL')">Mind (-)</button>
+                    <button id="btn_ddm_add" class="btn" onclick="setDayModalFilterType('ADDED')">➕ Csak Hozzáadások (-)</button>
+                    <button id="btn_ddm_rem" class="btn" onclick="setDayModalFilterType('REMOVED')">➖ Csak Elvételek (-)</button>
+                    <button id="btn_ddm_life" class="btn" onclick="setDayModalFilterType('LIFECYCLE')">👤 Fiók / Státusz (-)</button>
+                </div>
+                <div style="font-size:12.5px; color:#64748b; font-weight:bold;">
+                    Megjelenítve: <span id="ddm_visible_count" style="color:#0284c7;">-</span>
+                </div>
+            </div>
+
+            <div class="scroll-box" style="max-height:480px; margin-top:5px;">
+                <table>
+                    <thead>
+                        <!-- 1. SOR: KATTINTHATÓ RENDEZŐ FEJLÉCEK -->
+                        <tr>
+                            <th class="sortable-th" onclick="sortDayModal('timestamp')" title="Kattintson az időpont szerinti rendezéshez">
+                                Időpont <span id="sort_icon_timestamp" class="sort-icon">▼</span>
+                            </th>
+                            <th class="sortable-th" onclick="sortDayModal('entity_name')" title="Kattintson a felhasználónév szerinti rendezéshez">
+                                Érintett Felhasználó <span id="sort_icon_entity_name" class="sort-icon">↕</span>
+                            </th>
+                            <th class="sortable-th" onclick="sortDayModal('change_type')" title="Kattintson a művelet szerinti rendezéshez">
+                                Művelet <span id="sort_icon_change_type" class="sort-icon">↕</span>
+                            </th>
+                            <th class="sortable-th" onclick="sortDayModal('group_name')" title="Kattintson a csoportnév szerinti rendezéshez">
+                                Érintett Csoport <span id="sort_icon_group_name" class="sort-icon">↕</span>
+                            </th>
+                            <th class="sortable-th" onclick="sortDayModal('details')" title="Kattintson a részletek szerinti rendezéshez">
+                                Részletek <span id="sort_icon_details" class="sort-icon">↕</span>
+                            </th>
+                            <th class="sortable-th" onclick="sortDayModal('source_ref')" title="Kattintson a forrás szerinti rendezéshez">
+                                Forrás <span id="sort_icon_source_ref" class="sort-icon">↕</span>
+                            </th>
+                        </tr>
+                        <!-- 2. SOR: OSZLOPONKÉNTI SZŰRŐSÁV A LEHETSÉGES ÉRTÉKEKKEL -->
+                        <tr style="background:#f1f5f9;">
+                            <th style="padding:4px;"><input type="text" id="col_filter_time" class="col-filter-input" placeholder="Szűrés időre..." onkeyup="filterDayModalEvents()"></th>
+                            <th style="padding:4px;"><input type="text" id="col_filter_user" class="col-filter-input" placeholder="Szűrés felhasználóra..." onkeyup="filterDayModalEvents()"></th>
+                            <th style="padding:4px;"><select id="col_filter_action" class="col-filter-select" onchange="filterDayModalEvents()"><option value="">Mind (Művelet)</option></select></th>
+                            <th style="padding:4px;"><select id="col_filter_group" class="col-filter-select" onchange="filterDayModalEvents()"><option value="">Mind (Csoport)</option></select></th>
+                            <th style="padding:4px;"><input type="text" id="col_filter_details" class="col-filter-input" placeholder="Szűrés részletre..." onkeyup="filterDayModalEvents()"></th>
+                            <th style="padding:4px;"><select id="col_filter_source" class="col-filter-select" onchange="filterDayModalEvents()"><option value="">Mind (Forrás)</option></select></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ddm_events_body">
+                        <tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">Betöltés...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

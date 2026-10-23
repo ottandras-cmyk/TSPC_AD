@@ -1,5 +1,5 @@
 -- AD TRACKER - ÉLŐ POSTGRESQL DDL ADATBÁZIS SÉMA
--- Generálva: 2026-10-21 19:30:57 UTC | Verzió: v1.04
+-- Generálva: 2026-10-23 04:54:55 UTC | Verzió: v1.05
 
 CREATE TABLE active_web_sessions (
 	session_id VARCHAR(100) NOT NULL, 

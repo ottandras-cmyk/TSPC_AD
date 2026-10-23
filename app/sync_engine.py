@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from ldap3 import Server, Connection, ALL, SUBTREE
 import models
@@ -111,6 +111,11 @@ def run_ad_sync(db: Session) -> dict:
         w_changed = parse_ad_datetime(get_attr(entry, 'whenChanged'))
 
         if sam_key not in db_groups:
+            # Csak akkor tekintjük új csoportnak, ha valóban az elmúlt 3 napban jött létre az AD-ban
+            is_truly_new_group = False
+            if w_created and (now_utc - w_created).total_seconds() < 86400 * 3:
+                is_truly_new_group = True
+
             new_grp = models.ADGroup(
                 object_guid=get_guid(entry),
                 sam_account_name=sam,
@@ -127,7 +132,19 @@ def run_ad_sync(db: Session) -> dict:
             db.add(new_grp)
             db.flush()
             db_groups[sam_key] = new_grp
-            changes_count += 1
+
+            if is_truly_new_group:
+                db.add(models.ADAuditLog(
+                    timestamp=w_created or now_utc,
+                    entity_type="GROUP",
+                    entity_name=sam,
+                    change_type="GROUP_CREATED",
+                    details=f"Új AD csoport létrehozva ({grp_type_str})",
+                    raw_diff=None,
+                    source_type="AD_SYNC",
+                    source_ref="LIVE_AD"
+                ))
+                changes_count += 1
         else:
             g = db_groups[sam_key]
             g.distinguished_name = dn
@@ -186,7 +203,18 @@ def run_ad_sync(db: Session) -> dict:
         except Exception: pass
         user_status = determine_user_status(member_of_raw, is_enabled)
 
+        # Aktuális csoportnevek kinyerése
+        current_user_group_names = set()
+        for g_dn in member_of_raw:
+            match = re.search(r'CN=([^,]+)', str(g_dn), re.IGNORECASE)
+            if match: current_user_group_names.add(match.group(1).lower())
+
         if sam_key not in db_users:
+            # Csak akkor tekintjük új fióknak, ha valóban az elmúlt 3 napban jött létre az AD-ban
+            is_truly_new_user = False
+            if w_created and (now_utc - w_created).total_seconds() < 86400 * 3:
+                is_truly_new_user = True
+
             new_u = models.ADUser(
                 object_guid=get_guid(entry),
                 sam_account_name=sam,
@@ -214,21 +242,32 @@ def run_ad_sync(db: Session) -> dict:
             db.add(new_u)
             db.flush()
             db_users[sam_key] = new_u
-            db.add(models.ADAuditLog(
-                timestamp=now_utc,
-                entity_type="USER",
-                entity_name=sam,
-                change_type="USER_CREATED",
-                details=f"Új AD felhasználó létrehozva ({disp_name})",
-                raw_diff=None,
-                source_type="AD_SYNC",
-                source_ref="LIVE_AD"
-            ))
-            changes_count += 1
             u_obj = new_u
+
+            # Kezdeti csoporttagságok csendes beállítása (nem generál false-positive záport)
+            for ag in current_user_group_names:
+                g_obj = db_groups.get(ag)
+                if g_obj and g_obj not in u_obj.groups:
+                    u_obj.groups.append(g_obj)
+
+            if is_truly_new_user:
+                db.add(models.ADAuditLog(
+                    timestamp=w_created or now_utc,
+                    entity_type="USER",
+                    entity_name=sam,
+                    change_type="USER_CREATED",
+                    details=f"Új AD felhasználó létrehozva ({disp_name})",
+                    raw_diff=None,
+                    source_type="AD_SYNC",
+                    source_ref="LIVE_AD"
+                ))
+                changes_count += 1
         else:
             u_obj = db_users[sam_key]
-            
+
+            # FONTOS: Megvizsgáljuk, hogy ez a fiók most vált-e át CSV_IMPORT-ból élő AD_SYNC-re!
+            is_first_live_sync_for_user = (getattr(u_obj, "source_type", None) == "CSV_IMPORT")
+
             if w_created: u_obj.when_created = w_created
             if w_changed: u_obj.when_changed = w_changed
             if desc: u_obj.description = desc
@@ -236,34 +275,36 @@ def run_ad_sync(db: Session) -> dict:
                 if not u_obj.last_logon_date or last_logon_dt > u_obj.last_logon_date:
                     u_obj.last_logon_date = last_logon_dt
 
-            if u_obj.is_enabled != is_enabled:
-                ch_type = "USER_ENABLED" if is_enabled else "USER_DISABLED"
-                db.add(models.ADAuditLog(
-                    timestamp=now_utc,
-                    entity_type="USER",
-                    entity_name=sam,
-                    change_type=ch_type,
-                    details="Fiók státusz változott az AD-ban",
-                    raw_diff=None,
-                    source_type="AD_SYNC",
-                    source_ref="LIVE_AD"
-                ))
-                changes_count += 1
-                u_obj.is_enabled = is_enabled
+            # Ha ez már korábban is élő AD szinkron volt, figyeljük a fiók állapotváltozásait
+            if not is_first_live_sync_for_user:
+                if u_obj.is_enabled != is_enabled:
+                    ch_type = "USER_ENABLED" if is_enabled else "USER_DISABLED"
+                    db.add(models.ADAuditLog(
+                        timestamp=now_utc,
+                        entity_type="USER",
+                        entity_name=sam,
+                        change_type=ch_type,
+                        details="Fiók státusz változott az AD-ban",
+                        raw_diff=None,
+                        source_type="AD_SYNC",
+                        source_ref="LIVE_AD"
+                    ))
+                    changes_count += 1
 
-            if u_obj.user_status and u_obj.user_status != user_status:
-                db.add(models.ADAuditLog(
-                    timestamp=now_utc,
-                    entity_type="USER",
-                    entity_name=sam,
-                    change_type="STATUS_CHANGED",
-                    details=f"Besorolás változott: '{u_obj.user_status}' -> '{user_status}'",
-                    raw_diff=None,
-                    source_type="AD_SYNC",
-                    source_ref="LIVE_AD"
-                ))
-                changes_count += 1
+                if u_obj.user_status and u_obj.user_status != user_status:
+                    db.add(models.ADAuditLog(
+                        timestamp=now_utc,
+                        entity_type="USER",
+                        entity_name=sam,
+                        change_type="STATUS_CHANGED",
+                        details=f"Besorolás változott: '{u_obj.user_status}' -> '{user_status}'",
+                        raw_diff=None,
+                        source_type="AD_SYNC",
+                        source_ref="LIVE_AD"
+                    ))
+                    changes_count += 1
 
+            u_obj.is_enabled = is_enabled
             u_obj.display_name = disp_name or u_obj.display_name
             if mail: u_obj.mail = mail
             if phone: u_obj.telephone_number = phone
@@ -280,45 +321,51 @@ def run_ad_sync(db: Session) -> dict:
             u_obj.source_ref = "LIVE_AD"
             u_obj.last_synced_at = now_utc
 
-        # Csoporttagságok ellenőrzése
-        current_user_group_names = set()
-        for g_dn in member_of_raw:
-            match = re.search(r'CN=([^,]+)', str(g_dn), re.IGNORECASE)
-            if match: current_user_group_names.add(match.group(1).lower())
+            # --- CSOPORTTAGSÁGOK KEZELÉSE ---
+            if is_first_live_sync_for_user:
+                # HATÓKÖR-ILLESZTÉS (Baseline Reconciliation):
+                # A CSV-ben szűkebb/más volt a csoportlista mint az élő AD-ben.
+                # Felvesszük a valós élő AD állapotot alapként, DE NEM generálunk több száz false ADDED/REMOVED eseményt!
+                u_obj.groups.clear()
+                for ag in current_user_group_names:
+                    g_obj = db_groups.get(ag)
+                    if g_obj:
+                        u_obj.groups.append(g_obj)
+            else:
+                # TÉNYLEGES ÉLŐ VÁLTOZÁSOK KÖVETÉSE
+                existing_db_group_names = {g.sam_account_name.lower() for g in u_obj.groups}
 
-        existing_db_group_names = {g.sam_account_name.lower() for g in u_obj.groups}
+                for ag in (current_user_group_names - existing_db_group_names):
+                    g_obj = db_groups.get(ag)
+                    if g_obj:
+                        u_obj.groups.append(g_obj)
+                        db.add(models.ADAuditLog(
+                            timestamp=now_utc,
+                            entity_type="MEMBERSHIP",
+                            entity_name=sam,
+                            change_type="ADDED_TO_GROUP",
+                            details=f"Hozzáadva a(z) '{g_obj.sam_account_name}' csoporthoz",
+                            raw_diff=None,
+                            source_type="AD_SYNC",
+                            source_ref="LIVE_AD"
+                        ))
+                        changes_count += 1
 
-        for ag in (current_user_group_names - existing_db_group_names):
-            g_obj = db_groups.get(ag)
-            if g_obj:
-                u_obj.groups.append(g_obj)
-                db.add(models.ADAuditLog(
-                    timestamp=now_utc,
-                    entity_type="MEMBERSHIP",
-                    entity_name=sam,
-                    change_type="ADDED_TO_GROUP",
-                    details=f"Hozzáadva a(z) '{g_obj.sam_account_name}' csoporthoz",
-                    raw_diff=None,
-                    source_type="AD_SYNC",
-                    source_ref="LIVE_AD"
-                ))
-                changes_count += 1
-
-        for rg in (existing_db_group_names - current_user_group_names):
-            g_obj = db_groups.get(rg)
-            if g_obj and g_obj in u_obj.groups:
-                u_obj.groups.remove(g_obj)
-                db.add(models.ADAuditLog(
-                    timestamp=now_utc,
-                    entity_type="MEMBERSHIP",
-                    entity_name=sam,
-                    change_type="REMOVED_FROM_GROUP",
-                    details=f"Eltávolítva a(z) '{g_obj.sam_account_name}' csoportból",
-                    raw_diff=None,
-                    source_type="AD_SYNC",
-                    source_ref="LIVE_AD"
-                ))
-                changes_count += 1
+                for rg in (existing_db_group_names - current_user_group_names):
+                    g_obj = db_groups.get(rg)
+                    if g_obj and g_obj in u_obj.groups:
+                        u_obj.groups.remove(g_obj)
+                        db.add(models.ADAuditLog(
+                            timestamp=now_utc,
+                            entity_type="MEMBERSHIP",
+                            entity_name=sam,
+                            change_type="REMOVED_FROM_GROUP",
+                            details=f"Eltávolítva a(z) '{g_obj.sam_account_name}' csoportból",
+                            raw_diff=None,
+                            source_type="AD_SYNC",
+                            source_ref="LIVE_AD"
+                        ))
+                        changes_count += 1
 
     db.commit()
     conn.unbind()
