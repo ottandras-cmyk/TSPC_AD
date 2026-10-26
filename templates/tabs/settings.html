@@ -42,52 +42,83 @@
             </select>
         </div>
 
-        <!-- GitHub Integráció & Kód Publikálása (Push) -->
-        <div class="card-box">
+        <!-- ÚJ: Easy Project Integráció Kártya -->
+        <div class="card-box" style="border-left:4px solid #0284c7;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h4 style="margin:0; border:none; padding:0; color:#0369a1;">Easy Project Kapcsolat & Kinyerés</h4>
+                <button id="btnEpTestSave" class="btn" style="background:#0284c7; padding:5px 12px; font-size:12px; font-weight:bold;" onclick="testAndSaveEpConnection()">🔌 Tesztelés és Mentés</button>
+            </div>
+            <label>Easy Project Szerver URL</label>
+            <input type="text" id="cfg_ep_url" placeholder="pl. https://easyproject.cegnev.hu">
+            
+            <label>API Hozzáférési Kulcs (Token)</label>
+            <div style="position:relative; margin-bottom:12px;">
+                <input type="password" id="cfg_ep_key" placeholder="API token beírása..." style="padding-right:45px; margin-bottom:0;">
+                <button type="button" onclick="togglePasswordVisibility('cfg_ep_key', this)" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:18px; padding:0;" title="Token felfedése / elrejtése">👁️</button>
+            </div>
+
+            <div style="display:flex; gap:12px; align-items:center; margin-bottom:12px;">
+                <div style="flex:1;">
+                    <label style="margin-bottom:4px;">Automatikus Kinyerés</label>
+                    <select id="cfg_ep_sync_enabled">
+                        <option value="0">Kikapcsolva (Csak manuális)</option>
+                        <option value="1">Bekapcsolva</option>
+                    </select>
+                </div>
+                <div style="flex:1;">
+                    <label style="margin-bottom:4px;">Kinyerési Időköz</label>
+                    <select id="cfg_ep_sync_interval">
+                        <option value="5">5 percenként</option>
+                        <option value="15" selected>15 percenként (Ajánlott)</option>
+                        <option value="30">30 percenként</option>
+                        <option value="60">1 óránként</option>
+                        <option value="120">2 óránként</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn" style="background:#16a34a; width:100%; padding:8px; font-weight:bold; font-size:12px;" onclick="triggerEpManualSync()">
+                ⚡ Azonnali Kinyerés Indítása Most
+            </button>
+        </div>
+
+        <!-- GitHub Integráció -->
+        <div class="card-box" style="grid-column: span 2;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <h4 style="margin:0; border:none; padding:0;">GitHub Integráció & Publikáció</h4>
                 <button class="btn" style="background:#475569; padding:4px 10px; font-size:11.5px;" onclick="testGitHub()">Git Teszt</button>
             </div>
-            
-            <label>Repó (Owner/Repo)</label><input type="text" id="cfg_gh_repo">
-            
-            <label>Personal Access Token (PAT)</label>
-            <div style="position:relative; margin-bottom:12px;">
-                <input type="password" id="cfg_gh_token" placeholder="ghp_..." style="padding-right:45px; margin-bottom:0;">
-                <button type="button" onclick="togglePasswordVisibility('cfg_gh_token', this)" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:18px; padding:0;" title="Token felfedése / elrejtése">👁️</button>
-            </div>
-
-            <label>Cél Ág (Branch)</label><input type="text" id="cfg_gh_branch">
-
-            <!-- VISSZAÁLLÍTOTT GITHUB PUSH & VERZIÓ KÖZPONT -->
-            <div style="margin-top:12px; border-top:1px dashed #cbd5e1; padding-top:10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="font-size:13px;">Aktuális verzió: <b style="color:#0284c7; font-size:14px;">v<span id="app_version_label">betöltés...</span></b></span>
-                    <button class="btn" style="background:#0284c7; padding:3px 8px; font-size:11px;" onclick="fetchLiveGitHubVersion()">🔄 Verzió Frissítése</button>
-                </div>
-                <label style="margin-bottom:4px; display:block; font-size:12px;">Új verzió megjegyzése (Commit message):</label>
-                <input type="text" id="gh_custom_msg" placeholder="pl. Kereső javítása és új mentési funkciók..." style="margin-bottom:8px; font-size:12px;">
-                <button id="ghPushBtn" class="btn" style="background:#16a34a; width:100%; padding:8px; font-weight:bold; font-size:12.5px;" onclick="pushToGitHub()">
-                    🚀 Kód Publikálása (Push & Verzió Növelés)
-                </button>
-                
-                <div style="margin-top:10px;">
-                    <small style="color:#64748b; font-weight:bold;">Legutóbbi GitHub Commitek & Verziók:</small>
-                    <div id="gh_history_list" style="margin-top:4px; max-height:120px; overflow-y:auto; font-size:11.5px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:6px 10px;">
-                        Előzmények betöltése...
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+                <div><label>Repó (Owner/Repo)</label><input type="text" id="cfg_gh_repo"></div>
+                <div>
+                    <label>Personal Access Token (PAT)</label>
+                    <div style="position:relative;">
+                        <input type="password" id="cfg_gh_token" placeholder="ghp_..." style="padding-right:40px;">
+                        <button type="button" onclick="togglePasswordVisibility('cfg_gh_token', this)" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:16px;">👁️</button>
                     </div>
                 </div>
+                <div><label>Cél Ág (Branch)</label><input type="text" id="cfg_gh_branch"></div>
             </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px; margin-bottom:5px;">
+                <span style="font-size:13px;">Aktuális verzió: <b style="color:#0284c7;">v<span id="app_version_label">1.00</span></b></span>
+                <button class="btn" style="background:#0284c7; padding:2px 8px; font-size:11px;" onclick="fetchLiveGitHubVersion()">🔄 Frissítés</button>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="gh_custom_msg" placeholder="Új verzió leírása..." style="margin:0;">
+                <button id="ghPushBtn" class="btn" style="background:#16a34a; white-space:nowrap;" onclick="pushToGitHub()">🚀 Kód Publikálása (Push)</button>
+            </div>
+            <div id="gh_history_list" style="margin-top:8px; max-height:80px; overflow-y:auto; font-size:11px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:4px 8px;">Előzmények...</div>
 
-            <hr style="border:0; border-top:1px dashed #cbd5e1; margin:15px 0 10px 0;">
+            <hr style="border:0; border-top:1px dashed #cbd5e1; margin:12px 0 8px 0;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <label style="margin:0;">Ollama AI API URL</label>
-                <button class="btn" style="background:#475569; padding:3px 8px; font-size:11px;" onclick="testOllamaConnection()">🤖 Ollama Teszt</button>
+                <button class="btn" style="background:#475569; padding:2px 8px; font-size:11px;" onclick="testOllamaConnection()">🤖 Ollama Teszt</button>
             </div>
-            <input type="text" id="cfg_ollama_url" style="margin-top:5px;">
+            <input type="text" id="cfg_ollama_url" style="margin-top:4px; margin-bottom:0;">
         </div>
     </div>
-    <button class="btn" style="width:100%; margin-top:10px; padding:10px;" onclick="saveUnifiedSettings()">💾 Kapcsolati Beállítások Mentése</button>
+    <button class="btn" style="width:100%; margin-top:15px; padding:10px;" onclick="saveUnifiedSettings()">💾 Kapcsolati Beállítások Mentése</button>
 </div>
 
 <!-- 2. AL-FÜL: ADATBÁZIS & RENDSZERKARBANTARTÁS -->
@@ -109,10 +140,7 @@
             <input type="number" id="cfg_ret_telemetry" min="7" max="365" value="60">
             <label>Webes belépési és biztonsági naplók megőrzése (nap)</label>
             <input type="number" id="cfg_ret_logs" min="7" max="730" value="90">
-            <small style="display:block; color:#64748b; margin-top:-5px; margin-bottom:10px;">
-                Megjegyzés: Az AD jogosultsági audit napló sosem törlődik automatikusan!
-            </small>
-            <div style="display:flex; gap:10px;">
+            <div style="display:flex; gap:10px; margin-top:10px;">
                 <button class="btn" style="flex:1;" onclick="saveUnifiedSettings()">Házirend Mentése</button>
                 <button class="btn" style="background:#ea580c;" onclick="runLogRetentionCleanup()">🧹 Elavult Pontok Törlése</button>
             </div>
@@ -158,6 +186,7 @@
         <select id="cfg_default_tab">
             <option value="dashboard">Jogosultság Változások</option>
             <option value="users">Felhasználók és Csoportok</option>
+            <option value="easy-project">📁 Easy Project</option>
             <option value="ad-changes">📅 AD Változás Elemző</option>
             <option value="telemetry">📊 Telemetria & Rendszerállapot</option>
             <option value="sync-history">Szinkronizálási Napló</option>
@@ -172,14 +201,14 @@
         <select id="cfg_page_size">
             <option value="50">50 elem / oldal</option>
             <option value="100">100 elem / oldal</option>
-            <option value="150">150 elem / oldal (Alapértelmezett)</option>
+            <option value="150">150 elem / oldal</option>
             <option value="300">300 elem / oldal</option>
         </select>
         <label>Élő Telemetria Automata Frissítési Üteme</label>
         <select id="cfg_telemetry_refresh">
-            <option value="5">5 másodpercenként (Gyors)</option>
-            <option value="10">10 másodpercenként (Normál)</option>
-            <option value="30">30 másodpercenként (Kímélő)</option>
+            <option value="5">5 másodpercenként</option>
+            <option value="10">10 másodpercenként</option>
+            <option value="30">30 másodpercenként</option>
             <option value="0">Kikapcsolva</option>
         </select>
         <button class="btn" style="width:100%; margin-top:15px; padding:10px;" onclick="saveUnifiedSettings()">

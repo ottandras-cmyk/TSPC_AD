@@ -1,0 +1,103 @@
+<!-- KPI Összegző Kártyák -->
+<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:15px; margin-bottom:15px;">
+    <div class="card-box" style="margin:0; border-left:4px solid #0284c7; background:white;">
+        <small style="color:#64748b; font-weight:bold;">Összes Projekt</small>
+        <h3 id="ep_kpi_projects" style="margin:5px 0 0 0; color:#0284c7;">0 db</h3>
+    </div>
+    <div class="card-box" style="margin:0; border-left:4px solid #16a34a; background:white;">
+        <small style="color:#64748b; font-weight:bold;">Kinyert Feladatok</small>
+        <h3 id="ep_kpi_tasks" style="margin:5px 0 0 0; color:#16a34a;">0 db</h3>
+    </div>
+    <div class="card-box" style="margin:0; border-left:4px solid #8b5cf6; background:white;">
+        <small style="color:#64748b; font-weight:bold;">Kezelt Munkatársak</small>
+        <h3 id="ep_kpi_users" style="margin:5px 0 0 0; color:#8b5cf6;">0 fő</h3>
+    </div>
+    <div class="card-box" style="margin:0; border-left:4px solid #f59e0b; background:white;">
+        <small style="color:#64748b; font-weight:bold;">Utolsó Kinyerés</small>
+        <h4 id="ep_kpi_lastsync" style="margin:8px 0 0 0; font-size:13px; color:#475569;">-</h4>
+    </div>
+</div>
+
+<!-- Al-nézetek és Akciósáv -->
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+    <div style="display:flex; gap:8px;">
+        <button id="btnEpTasks" class="btn" style="background:#0284c7; padding:7px 14px;" onclick="switchEpSubTab('tasks')">
+            📋 Feladatok Lista
+        </button>
+        <button id="btnEpProjects" class="btn" style="background:#f1f5f9; color:#334155; padding:7px 14px;" onclick="switchEpSubTab('projects')">
+            📁 Projektek Lista
+        </button>
+        <button id="btnEpHistory" class="btn" style="background:#f1f5f9; color:#334155; padding:7px 14px;" onclick="switchEpSubTab('history')">
+            🕒 Kinyerési Napló
+        </button>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <button class="btn" style="background:#0284c7; padding:7px 12px; font-size:12px;" onclick="loadEasyProjectData()">🔄 Frissítés</button>
+        <button class="btn" style="background:#16a34a; padding:7px 14px; font-size:12px; font-weight:bold;" onclick="triggerEpManualSync()">⚡ Kinyerés Indítása Most</button>
+    </div>
+</div>
+
+<div style="margin-bottom:12px;">
+    <input type="text" id="epSearchBox" placeholder="Keresés feladat tárgya, felelős, projekt vagy státusz szerint..." onkeyup="filterEpTable()">
+</div>
+
+<!-- 1. Feladatok táblázat -->
+<div id="viewEpTasksBox" class="card-box" style="background:white; padding:10px 15px;">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Projekt</th>
+                <th>Tárgy / Leírás</th>
+                <th>Típus</th>
+                <th>Státusz</th>
+                <th>Prioritás</th>
+                <th>Felelős (AD/EP)</th>
+                <th>Készültség</th>
+                <th>Határidő</th>
+            </tr>
+        </thead>
+        <tbody id="epTasksTableBody">
+            <tr><td colspan="9" style="text-align:center; padding:15px; color:#94a3b8;">Feladatok betöltése...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 2. Projektek táblázat -->
+<div id="viewEpProjectsBox" class="card-box" style="background:white; padding:10px 15px; display:none;">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Projekt Neve</th>
+                <th>Azonosító</th>
+                <th>Státusz</th>
+                <th>Feladatok Száma</th>
+                <th>Utolsó Módosítás</th>
+            </tr>
+        </thead>
+        <tbody id="epProjectsTableBody">
+            <tr><td colspan="6" style="text-align:center; padding:15px; color:#94a3b8;">Projektek betöltése...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 3. Kinyerési napló -->
+<div id="viewEpHistoryBox" class="card-box" style="background:white; padding:10px 15px; display:none;">
+    <table>
+        <thead>
+            <tr>
+                <th>Indítás</th>
+                <th>Befejezés</th>
+                <th>Időtartam</th>
+                <th>Típus</th>
+                <th>Státusz</th>
+                <th>Kinyert Elemek</th>
+                <th>Hiba / Üzenet</th>
+            </tr>
+        </thead>
+        <tbody id="epHistoryTableBody">
+            <tr><td colspan="7" style="text-align:center; padding:15px; color:#94a3b8;">Napló betöltése...</td></tr>
+        </tbody>
+    </table>
+</div>

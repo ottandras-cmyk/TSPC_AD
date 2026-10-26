@@ -27,7 +27,7 @@ os.makedirs(EXPORTS_DIR, exist_ok=True)
 TABLES_TO_DUMP = [
     "app_settings", "ad_users", "ad_groups", "ad_group_members",
     "ad_audit_log", "sync_history", "web_access_log",
-    "system_telemetry", "host_ip_history", "active_web_sessions"
+    "system_telemetry", "host_ip_history", "active_web_sessions", "ep_projects", "ep_tasks", "ep_users", "ep_sync_history"
 ]
 
 EXCLUDED_DIRS = {"__pycache__", ".git", "venv", ".pytest_cache", "backups", "exports", ".idea", ".vscode"}

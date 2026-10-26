@@ -145,3 +145,66 @@ class ActiveSession(Base):
     device_type = Column(String(50))
     location = Column(String(255))
     user_agent = Column(Text)
+
+# ========================================================
+# EASY PROJECT INTEGRÁCIÓS MODELLEK
+# ========================================================
+
+class EPProject(Base):
+    __tablename__ = "ep_projects"
+    id = Column(Integer, primary_key=True, index=True)
+    ep_id = Column(Integer, unique=True, index=True)
+    name = Column(String(255), nullable=False)
+    identifier = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    status = Column(Integer, default=1)
+    is_public = Column(Boolean, default=False)
+    created_on = Column(DateTime, nullable=True)
+    updated_on = Column(DateTime, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+class EPUser(Base):
+    __tablename__ = "ep_users"
+    id = Column(Integer, primary_key=True, index=True)
+    ep_id = Column(Integer, unique=True, index=True)
+    login = Column(String(100), index=True)
+    firstname = Column(String(100), nullable=True)
+    lastname = Column(String(100), nullable=True)
+    mail = Column(String(255), index=True)
+    status = Column(Integer, default=1)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+class EPTask(Base):
+    __tablename__ = "ep_tasks"
+    id = Column(Integer, primary_key=True, index=True)
+    ep_id = Column(Integer, unique=True, index=True)
+    project_id = Column(Integer, nullable=True, index=True)
+    project_name = Column(String(255), nullable=True)
+    tracker_name = Column(String(100), nullable=True)
+    status_name = Column(String(100), nullable=True)
+    priority_name = Column(String(100), nullable=True)
+    subject = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    assigned_to_id = Column(Integer, nullable=True)
+    assigned_to_name = Column(String(255), nullable=True)
+    assigned_to_mail = Column(String(255), nullable=True, index=True)
+    done_ratio = Column(Integer, default=0)
+    estimated_hours = Column(Float, nullable=True)
+    spent_hours = Column(Float, nullable=True)
+    created_on = Column(DateTime, nullable=True)
+    updated_on = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+class EPSyncHistory(Base):
+    __tablename__ = "ep_sync_history"
+    id = Column(Integer, primary_key=True, index=True)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    ended_at = Column(DateTime, nullable=True)
+    duration_seconds = Column(Float, default=0.0)
+    status = Column(String(50), default="FOLYAMATBAN")
+    trigger_type = Column(String(50), default="MANUAL")
+    projects_count = Column(Integer, default=0)
+    tasks_count = Column(Integer, default=0)
+    users_count = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)

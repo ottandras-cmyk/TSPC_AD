@@ -33,6 +33,10 @@ def get_all_settings(request: Request, db: Session = Depends(get_db)):
         "GH_REPO": get_setting(db, "GH_REPO", ""),
         "GH_TOKEN": get_setting(db, "GH_TOKEN", ""),
         "GH_BRANCH": get_setting(db, "GH_BRANCH", "main"),
+        "EP_URL": get_setting(db, "EP_URL", ""),
+        "EP_API_KEY": get_setting(db, "EP_API_KEY", ""),
+        "EP_SYNC_ENABLED": get_setting(db, "EP_SYNC_ENABLED", "0"),
+        "EP_SYNC_INTERVAL_MINUTES": get_setting(db, "EP_SYNC_INTERVAL_MINUTES", "15"),
         "DEFAULT_TAB": get_setting(db, "DEFAULT_TAB", "dashboard"),
         "UI_TABLE_DENSITY": get_setting(db, "UI_TABLE_DENSITY", "normal"),
         "UI_PAGE_SIZE": get_setting(db, "UI_PAGE_SIZE", "150"),
@@ -62,6 +66,23 @@ async def save_settings(request: Request, db: Session = Depends(get_db)):
                 update_setting(db, "GH_TOKEN", val_t.strip())
         if "GH_BRANCH" in data: update_setting(db, "GH_BRANCH", data.get("GH_BRANCH", "main").strip())
         
+        # Easy Project beállítások elmentése
+        if "EP_URL" in data: update_setting(db, "EP_URL", data.get("EP_URL", "").strip())
+        if "EP_API_KEY" in data and data.get("EP_API_KEY") is not None:
+            val_k = data.get("EP_API_KEY")
+            if val_k != "***" and val_k != "":
+                update_setting(db, "EP_API_KEY", val_k.strip())
+        if "EP_SYNC_ENABLED" in data: update_setting(db, "EP_SYNC_ENABLED", str(data.get("EP_SYNC_ENABLED", "0")))
+        if "EP_SYNC_INTERVAL_MINUTES" in data:
+            ep_int = int(data.get("EP_SYNC_INTERVAL_MINUTES", 15))
+            update_setting(db, "EP_SYNC_INTERVAL_MINUTES", str(ep_int))
+            try:
+                from main import scheduler, EP_JOB_ID, scheduled_ep_sync_job
+                if scheduler.get_job(EP_JOB_ID): scheduler.remove_job(EP_JOB_ID)
+                if str(data.get("EP_SYNC_ENABLED", "0")) == "1" and ep_int > 0:
+                    scheduler.add_job(scheduled_ep_sync_job, 'interval', minutes=ep_int, id=EP_JOB_ID)
+            except Exception: pass
+
         if "SYNC_INTERVAL_MINUTES" in data:
             minutes = int(data.get("SYNC_INTERVAL_MINUTES", 15))
             update_setting(db, "SYNC_INTERVAL_MINUTES", str(minutes))
@@ -82,6 +103,40 @@ async def save_settings(request: Request, db: Session = Depends(get_db)):
         return {"status": "SUCCESS"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
+
+@router.post("/test/easyproject")
+async def test_easyproject_endpoint(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request)
+    if not user: return JSONResponse(status_code=401, content={})
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    url = body.get("url") or get_setting(db, "EP_URL", "")
+    key = body.get("key")
+    if not key or key == "***": key = get_setting(db, "EP_API_KEY", "")
+    
+    from easy_project_sync import test_easy_project_connection
+    ok, msg = test_easy_project_connection(url, key)
+    
+    # Ha a teszt sikeres, azonnal elmentjük az adatbázisba is!
+    if ok and body.get("save", True):
+        if url: update_setting(db, "EP_URL", url.strip())
+        if key and key != "***": update_setting(db, "EP_API_KEY", key.strip())
+        if "enabled" in body: update_setting(db, "EP_SYNC_ENABLED", str(body["enabled"]))
+        if "interval" in body:
+            ep_int = int(body.get("interval", 15))
+            update_setting(db, "EP_SYNC_INTERVAL_MINUTES", str(ep_int))
+            try:
+                from main import scheduler, EP_JOB_ID, scheduled_ep_sync_job
+                if scheduler.get_job(EP_JOB_ID): scheduler.remove_job(EP_JOB_ID)
+                if str(body.get("enabled", "0")) == "1" and ep_int > 0:
+                    scheduler.add_job(scheduled_ep_sync_job, 'interval', minutes=ep_int, id=EP_JOB_ID)
+            except Exception: pass
+        msg += " A kapcsolat adatai és beállításai sikeresen elmentve az adatbázisba!"
+        log_web_activity(db, request, user, "EASYPROJECT_TESZT_ÉS_MENTÉS", "Easy Project kapcsolat tesztelve és elmentve", "SIKERES")
+        
+    return {"status": "SUCCESS" if ok else "ERROR", "message": msg}
 
 @router.post("/test/ad")
 async def test_ad_endpoint(request: Request, db: Session = Depends(get_db)):
@@ -266,7 +321,8 @@ def optimize_database(request: Request, db: Session = Depends(get_db)):
         tables = [
             "ad_users", "ad_groups", "ad_group_members", "ad_audit_log",
             "sync_history", "web_access_log", "system_telemetry",
-            "host_ip_history", "active_web_sessions", "app_settings"
+            "host_ip_history", "active_web_sessions", "app_settings",
+            "ep_projects", "ep_tasks", "ep_users", "ep_sync_history"
         ]
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             for tbl in tables:

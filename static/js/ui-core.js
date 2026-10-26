@@ -2054,3 +2054,323 @@ switchSettingsSubTab = function(subTab) {
         loadGitHubHistory();
     }
 };
+
+// --- EASY PROJECT VEZÉRLÉS ---
+let currentEpSubView = 'tasks';
+let allEpTasks = [];
+let allEpProjects = [];
+
+function switchEpSubTab(view) {
+    currentEpSubView = view;
+    const btnT = document.getElementById('btnEpTasks');
+    const btnP = document.getElementById('btnEpProjects');
+    const btnH = document.getElementById('btnEpHistory');
+    const boxT = document.getElementById('viewEpTasksBox');
+    const boxP = document.getElementById('viewEpProjectsBox');
+    const boxH = document.getElementById('viewEpHistoryBox');
+    
+    [btnT, btnP, btnH].forEach(b => { if (b) { b.style.background = '#f1f5f9'; b.style.color = '#334155'; } });
+    [boxT, boxP, boxH].forEach(b => { if (b) b.style.display = 'none'; });
+
+    if (view === 'tasks') {
+        if (btnT) { btnT.style.background = '#0284c7'; btnT.style.color = 'white'; }
+        if (boxT) boxT.style.display = 'block';
+    } else if (view === 'projects') {
+        if (btnP) { btnP.style.background = '#0284c7'; btnP.style.color = 'white'; }
+        if (boxP) boxP.style.display = 'block';
+    } else {
+        if (btnH) { btnH.style.background = '#0284c7'; btnH.style.color = 'white'; }
+        if (boxH) boxH.style.display = 'block';
+    }
+}
+
+async function loadEasyProjectData() {
+    try {
+        const [sumRes, tRes, pRes, hRes] = await Promise.all([
+            fetch('/api/easyproject/summary'),
+            fetch('/api/easyproject/tasks'),
+            fetch('/api/easyproject/projects'),
+            fetch('/api/easyproject/sync-history')
+        ]);
+        const sum = await sumRes.json();
+        const tasksData = await tRes.json();
+        const projectsData = await pRes.json();
+        const historyData = await hRes.json();
+
+        safeSetText('ep_kpi_projects', (sum.projects_count || 0) + ' db');
+        safeSetText('ep_kpi_tasks', (sum.tasks_count || 0) + ' db');
+        safeSetText('ep_kpi_users', (sum.users_count || 0) + ' fő');
+        safeSetText('ep_kpi_lastsync', sum.last_sync || '-');
+
+        allEpTasks = tasksData.tasks || [];
+        allEpProjects = projectsData.projects || [];
+
+        renderEpTasks(allEpTasks);
+        renderEpProjects(allEpProjects);
+        renderEpHistory(historyData || []);
+    } catch(e) {}
+}
+
+function renderEpTasks(tasks) {
+    const tbody = document.getElementById('epTasksTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!tasks || tasks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:15px; color:#94a3b8;">Nincs megjeleníthető feladat. Kattintson a Kinyerés Indítása gombra!</td></tr>';
+        return;
+    }
+    tasks.forEach(t => {
+        let pColor = '#0284c7', pBg = '#e0f2fe';
+        if (t.priority === 'Magas' || t.priority === 'Azonnali') { pColor = '#dc2626'; pBg = '#fee2e2'; }
+        
+        let assignedHtml = escapeHtml(t.assigned_to);
+        if (t.assigned_mail && t.assigned_mail !== '-') {
+            assignedHtml += `<br/><small style="color:#0369a1;">✉️ ${escapeHtml(t.assigned_mail)}</small>`;
+        }
+
+        tbody.innerHTML += `<tr>
+            <td><code>#${t.id}</code></td>
+            <td><b>${escapeHtml(t.project_name)}</b></td>
+            <td>${escapeHtml(t.subject)}</td>
+            <td><span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(t.tracker)}</span></td>
+            <td><span style="background:#dcfce7; color:#15803d; font-weight:bold; padding:2px 6px; border-radius:10px; font-size:11px;">${escapeHtml(t.status)}</span></td>
+            <td><span style="background:${pBg}; color:${pColor}; font-weight:bold; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(t.priority)}</span></td>
+            <td>${assignedHtml}</td>
+            <td><b>${t.done_ratio}%</b></td>
+            <td>${escapeHtml(t.due_date)}</td>
+        </tr>`;
+    });
+}
+
+function renderEpProjects(projects) {
+    const tbody = document.getElementById('epProjectsTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!projects || projects.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:15px; color:#94a3b8;">Nincs projekt adat.</td></tr>';
+        return;
+    }
+    projects.forEach(p => {
+        tbody.innerHTML += `<tr>
+            <td><code>#${p.id}</code></td>
+            <td><b>${escapeHtml(p.name)}</b></td>
+            <td><code>${escapeHtml(p.identifier)}</code></td>
+            <td><span style="background:#dcfce7; color:#15803d; padding:2px 6px; border-radius:8px; font-size:11px; font-weight:bold;">${escapeHtml(p.status)}</span></td>
+            <td><b>${p.task_count} db</b></td>
+            <td>${escapeHtml(p.updated_on)}</td>
+        </tr>`;
+    });
+}
+
+function renderEpHistory(history) {
+    const tbody = document.getElementById('epHistoryTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!history || history.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:15px; color:#94a3b8;">Még nincs rögzített kinyerési napló.</td></tr>';
+        return;
+    }
+    history.forEach(h => {
+        const stBg = h.status === 'SIKERES' ? '#dcfce7' : '#fee2e2';
+        const stCol = h.status === 'SIKERES' ? '#15803d' : '#b91c1c';
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(h.started)}</td>
+            <td>${escapeHtml(h.ended)}</td>
+            <td><b>${escapeHtml(h.duration)}</b></td>
+            <td><span style="background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escapeHtml(h.trigger)}</span></td>
+            <td><span style="background:${stBg}; color:${stCol}; padding:2px 6px; border-radius:8px; font-weight:bold;">${escapeHtml(h.status)}</span></td>
+            <td>${escapeHtml(h.counts)}</td>
+            <td><small style="color:#b91c1c;">${escapeHtml(h.error || '-')}</small></td>
+        </tr>`;
+    });
+}
+
+function filterEpTable() {
+    const q = (document.getElementById('epSearchBox')?.value || '').toLowerCase().trim();
+    if (currentEpSubView === 'tasks') {
+        const filtered = allEpTasks.filter(t => 
+            (t.subject && t.subject.toLowerCase().includes(q)) ||
+            (t.project_name && t.project_name.toLowerCase().includes(q)) ||
+            (t.assigned_to && t.assigned_to.toLowerCase().includes(q)) ||
+            (t.status && t.status.toLowerCase().includes(q))
+        );
+        renderEpTasks(filtered);
+    } else if (currentEpSubView === 'projects') {
+        const filtered = allEpProjects.filter(p =>
+            (p.name && p.name.toLowerCase().includes(q)) ||
+            (p.identifier && p.identifier.toLowerCase().includes(q))
+        );
+        renderEpProjects(filtered);
+    }
+}
+
+async function testEpConnection() {
+    alert('Easy Project kapcsolat tesztelése folyamatban...');
+    try {
+        const payload = {
+            url: document.getElementById('cfg_ep_url')?.value,
+            key: document.getElementById('cfg_ep_key')?.value
+        };
+        const res = await fetch('/api/settings/test/easyproject', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+        alert((d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message);
+    } catch(e) { alert('Hiba a teszt során: ' + e); }
+}
+
+async function triggerEpManualSync() {
+    if (!confirm('Elindítja az azonnali adatkivonást az Easy Projectből?')) return;
+    try {
+        const res = await fetch('/api/easyproject/sync', { method: 'POST' });
+        const d = await res.json();
+        alert(d.message || 'Kinyerés befejeződött!');
+        loadEasyProjectData();
+    } catch(e) { alert('Hiba: ' + e); }
+}
+
+// Bővítjük a fő switchTab függvényt az Easy Project füllel
+const origTabSwitcher = switchTab;
+switchTab = function(tabId) {
+    origTabSwitcher(tabId);
+    if (tabId === 'easy-project') {
+        loadEasyProjectData();
+    }
+};
+
+// Bővítjük a beállítások betöltését az Easy Project mezőkkel
+const prevSettingsLoader = loadUnifiedSettings;
+loadUnifiedSettings = async function() {
+    await prevSettingsLoader();
+    try {
+        const res = await fetch('/api/settings/all');
+        const data = await res.json();
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        setVal('cfg_ep_url', data.EP_URL);
+        setVal('cfg_ep_key', data.EP_API_KEY);
+        setVal('cfg_ep_sync_enabled', data.EP_SYNC_ENABLED || '0');
+        setVal('cfg_ep_sync_interval', data.EP_SYNC_INTERVAL_MINUTES || '15');
+    } catch(e) {}
+};
+
+// Bővítjük a beállítások mentését az Easy Project mezőkkel
+const prevSettingsSaver = saveUnifiedSettings;
+saveUnifiedSettings = async function() {
+    const epUrl = document.getElementById('cfg_ep_url')?.value;
+    const epKey = document.getElementById('cfg_ep_key')?.value;
+    const epSyncEn = document.getElementById('cfg_ep_sync_enabled')?.value;
+    const epSyncInt = document.getElementById('cfg_ep_sync_interval')?.value;
+
+    const payload = {
+        AD_SERVER: document.getElementById('cfg_ad_server')?.value,
+        AD_USER: document.getElementById('cfg_ad_user')?.value,
+        AD_PASSWORD: document.getElementById('cfg_ad_password')?.value,
+        AD_SEARCH_BASE: document.getElementById('cfg_ad_base')?.value,
+        SYNC_INTERVAL_MINUTES: document.getElementById('cfg_sync_interval')?.value,
+        OLLAMA_URL: document.getElementById('cfg_ollama_url')?.value,
+        GH_REPO: document.getElementById('cfg_gh_repo')?.value,
+        GH_TOKEN: document.getElementById('cfg_gh_token')?.value,
+        GH_BRANCH: document.getElementById('cfg_gh_branch')?.value,
+
+        EP_URL: epUrl,
+        EP_API_KEY: epKey,
+        EP_SYNC_ENABLED: epSyncEn,
+        EP_SYNC_INTERVAL_MINUTES: epSyncInt,
+
+        DEFAULT_TAB: document.getElementById('cfg_default_tab')?.value,
+        UI_TABLE_DENSITY: document.getElementById('cfg_table_density')?.value,
+        UI_PAGE_SIZE: document.getElementById('cfg_page_size')?.value,
+        UI_TELEMETRY_REFRESH_SEC: document.getElementById('cfg_telemetry_refresh')?.value,
+
+        RETENTION_DAYS_LOGS: document.getElementById('cfg_ret_logs')?.value,
+        RETENTION_DAYS_TELEMETRY: document.getElementById('cfg_ret_telemetry')?.value
+    };
+
+    try {
+        const res = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+        if (d.status === 'SUCCESS') {
+            alert('✅ Beállítások (beleértve az Easy Project kapcsolatot) sikeresen elmentve!');
+            applyClientUiPreferences(payload);
+        } else {
+            alert('Hiba: ' + d.message);
+        }
+    } catch(e) { alert('Hálózati hiba: ' + e); }
+};
+
+// --- EASY PROJECT TESZTELÉS ÉS MENTÉS VEZÉRLÉS ---
+async function testAndSaveEpConnection() {
+    const url = document.getElementById('cfg_ep_url')?.value?.trim();
+    const key = document.getElementById('cfg_ep_key')?.value?.trim();
+    const enabled = document.getElementById('cfg_ep_sync_enabled')?.value || '0';
+    const interval = document.getElementById('cfg_ep_sync_interval')?.value || '15';
+
+    if (!url) {
+        alert('Kérjük, adja meg az Easy Project szerver URL-jét!');
+        return;
+    }
+    if (!key) {
+        alert('Kérjük, adja meg az Easy Project API hozzáférési kulcsot!');
+        return;
+    }
+
+    const btn = document.getElementById('btnEpTestSave');
+    if (btn) { btn.disabled = true; btn.innerText = '⏳ Tesztelés és mentés...'; }
+
+    try {
+        const payload = {
+            url: url,
+            key: key,
+            enabled: enabled,
+            interval: interval,
+            save: true
+        };
+        const res = await fetch('/api/settings/test/easyproject', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+        if (d.status === 'SUCCESS') {
+            alert('✅ ' + d.message + '\n\nAz adatok elmentve, az azonnali kinyerés most már indítható!');
+            loadUnifiedSettings();
+        } else {
+            alert('❌ ' + d.message);
+        }
+    } catch(e) {
+        alert('Hiba a tesztelés / mentés során: ' + e);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '🔌 Tesztelés és Mentés'; }
+    }
+}
+
+// Visszafelé kompatibilitás biztosítása
+testEpConnection = testAndSaveEpConnection;
+
+// Azonnali manuális kinyerés megerősítése: automatikusan átküldi az aktuális űrlapértékeket is
+const origTriggerEpManualSync = triggerEpManualSync;
+triggerEpManualSync = async function() {
+    if (!confirm('Elindítja az azonnali adatkivonást az Easy Projectből?')) return;
+    try {
+        const payload = {
+            url: document.getElementById('cfg_ep_url')?.value?.trim() || '',
+            key: document.getElementById('cfg_ep_key')?.value?.trim() || ''
+        };
+        const res = await fetch('/api/easyproject/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+        alert(d.message || 'Kinyerés befejeződött!');
+        loadEasyProjectData();
+    } catch(e) {
+        alert('Hiba: ' + e);
+    }
+};

@@ -232,3 +232,29 @@ def index_page(request: Request, db: Session = Depends(get_db)):
         "interval_options": interval_options
     })
     return HTMLResponse(content=content)
+
+# Easy Project router regisztráció és időzített feladat
+from routers import easy_project
+app.include_router(easy_project.router)
+
+EP_JOB_ID = "scheduled_ep_sync_job"
+
+def scheduled_ep_sync_job():
+    db = SessionLocal()
+    try:
+        from config_manager import get_setting
+        if get_setting(db, "EP_SYNC_ENABLED", "0") == "1":
+            from easy_project_sync import sync_easy_project_data
+            sync_easy_project_data(db, trigger_type="SCHEDULED")
+    finally:
+        db.close()
+
+try:
+    ep_db = SessionLocal()
+    from config_manager import get_setting
+    ep_mins = int(get_setting(ep_db, "EP_SYNC_INTERVAL_MINUTES", "15"))
+    if get_setting(ep_db, "EP_SYNC_ENABLED", "0") == "1" and ep_mins > 0:
+        scheduler.add_job(scheduled_ep_sync_job, 'interval', minutes=ep_mins, id=EP_JOB_ID)
+    ep_db.close()
+except Exception:
+    pass
