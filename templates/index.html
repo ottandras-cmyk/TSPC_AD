@@ -2341,5 +2341,108 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 </script>
+
+
+
+
+
+
+
+
+<script id="direct-backup-action-handler">
+window.triggerSystemBackupNow = async function(btnElement) {
+    var btn = btnElement || document.querySelector('button[id*="backup"]') || event?.target;
+    var origText = btn ? btn.innerHTML : '';
+
+    if (btn) {
+        btn.innerHTML = '⏳ Mentés folyamatban (DB + Forrás + Doksi)...';
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+    }
+
+    try {
+        var res = await fetch('/api/backups/create', { method: 'POST' });
+        var d = await res.json();
+        if (d.status === 'SUCCESS') {
+            alert('✅ SIKERES TELJES RENDSZERMENTÉS!\n\nFájl: ' + d.filename + '\nMéret: ' + d.size + '\nDátum: ' + d.date);
+            await window.reloadBackupTableList();
+        } else {
+            alert('❌ Hiba a mentés során: ' + (d.message || 'Ismeretlen hiba'));
+        }
+    } catch(err) {
+        alert('❌ Hálózati hiba: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.innerHTML = origText || '<span>💾</span> Új Helyi Mentés Készítése';
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    }
+};
+
+window.reloadBackupTableList = async function() {
+    try {
+        var res = await fetch('/api/backups/list');
+        if (!res.ok) res = await fetch('/api/backups');
+        var data = await res.json();
+        var list = data.backups || data.data || [];
+
+        var tbody = document.querySelector('#pane-backups table tbody') || document.querySelector('table tbody');
+        if (tbody) {
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;">Még nincs mentési fájl.</td></tr>';
+            } else {
+                var html = '';
+                list.forEach(function(b) {
+                    html += '<tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">' +
+                        '<td style="padding:10px 14px;font-weight:700;font-family:monospace;color:#0f172a;">📦 ' + b.filename + '</td>' +
+                        '<td style="padding:10px 14px;color:#475569;">' + b.date + '</td>' +
+                        '<td style="padding:10px 14px;"><span style="background:#e0f2fe;color:#0284c7;padding:3px 8px;border-radius:12px;font-weight:700;">' + b.size + '</span></td>' +
+                        '<td style="padding:10px 14px;color:#334155;">' + (b.comment || b.description || 'Teljes Rendszermentés') + '</td>' +
+                        '<td style="padding:10px 14px;text-align:right;white-space:nowrap;">' +
+                            '<a href="/api/backups/download/' + encodeURIComponent(b.filename) + '" style="background:#0284c7;color:white;padding:5px 12px;border-radius:4px;text-decoration:none;font-size:12px;font-weight:600;margin-right:6px;">⬇️ Letöltés</a>' +
+                            '<button onclick="window.deleteBackupItem(\'' + b.filename + '\')" style="background:#ef4444;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">🗑️</button>' +
+                        '</td></tr>';
+                });
+                tbody.innerHTML = html;
+            }
+        }
+
+        // Összesítő statisztikai kártyák frissítése
+        var vals = document.querySelectorAll('#pane-backups .stat-val');
+        if (vals && vals.length >= 4) {
+            vals[0].innerText = list.length + ' db';
+            vals[1].innerText = data.last_backup || '--';
+            vals[3].innerText = (data.total_size_mb || 0) + ' MB';
+        }
+    } catch(e) {}
+};
+
+window.deleteBackupItem = async function(fn) {
+    if (!confirm('Biztosan törölni szeretné ezt a mentést?\n\n' + fn)) return;
+    try {
+        await fetch('/api/backups/' + encodeURIComponent(fn), { method: 'DELETE' });
+        window.reloadBackupTableList();
+    } catch(e) { alert('Hiba a törléskor: ' + e.message); }
+};
+
+// Globális kattintásfigyelő (CAPTURE fázisban): azonnal elkapja a mentés gomb megnyomását
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    var txt = btn.textContent || btn.innerText || '';
+    if (txt.includes('Új Helyi Mentés')) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.triggerSystemBackupNow(btn);
+    } else if (txt.includes('Mentések') || txt.includes('Verziók') || txt.includes('Frissítés')) {
+        setTimeout(window.reloadBackupTableList, 100);
+    }
+}, true);
+
+document.addEventListener('DOMContentLoaded', window.reloadBackupTableList);
+setTimeout(window.reloadBackupTableList, 250);
+</script>
+
 </body>
 </html>

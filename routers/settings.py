@@ -513,9 +513,10 @@ async def github_push(req: Request):
 
     commit_sha = subprocess.getoutput("git rev-parse --short HEAD 2>/dev/null").strip() or "-"
 
-    clean_repo = re.sub(r'^https?://(?:[^@]+@)?github\.com/', 'github.com/', repo_url).strip().rstrip('/')
-    if not clean_repo.endswith('.git'): clean_repo += '.git'
-    auth_remote = f"https://x-access-token:{token}@{clean_repo}"
+    # Szigorú lezáró perjel és formátum tisztítás
+    clean_repo = re.sub(r'^https?://(?:[^@]+@)?github\.com/', '', repo_url).strip().strip('/')
+    if clean_repo.endswith('.git'): clean_repo = clean_repo[:-4]
+    auth_remote = f"https://{token}@github.com/{clean_repo}.git"
 
     p = subprocess.run(f'git push "{auth_remote}" HEAD:{branch} --tags 2>&1', shell=True, capture_output=True, text=True, timeout=45)
     

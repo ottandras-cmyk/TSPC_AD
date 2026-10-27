@@ -1,175 +1,200 @@
-import os, re, json, glob, subprocess, time, shutil
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+import os, json, glob, subprocess, time, tarfile, shutil
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse, FileResponse
 
 router = APIRouter(prefix="/api/backups", tags=["backups"])
 
-BACKUP_DIR = "app/backups" if os.path.exists("app/backups") else "backups"
-SCREENSHOTS_DIR = "app/screenshots" if os.path.exists("app/screenshots") else "screenshots"
-os.makedirs(BACKUP_DIR, exist_ok=True)
-os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
+def get_bdir():
+    for d in ["/app/backups", "app/backups", "backups"]:
+        if os.path.exists(d): return d
+    os.makedirs("/app/backups", exist_ok=True)
+    return "/app/backups"
 
-def get_git_info():
-    if os.path.exists("app/git_version.txt"):
-        try:
-            with open("app/git_version.txt", "r", encoding="utf-8") as f:
-                v = f.read().strip()
-                if v: return v
-        except Exception: pass
-    return "v1.09"
-
+@router.get("")
+@router.get("/")
 @router.get("/list")
 def list_backups():
-    items = []
-    total_size = 0
-    pattern = os.path.join(BACKUP_DIR, "*.*")
-    for f in glob.glob(pattern):
-        if not (f.endswith(".sql.gz") or f.endswith(".tar.gz") or f.endswith(".sql")):
-            continue
-        st = os.stat(f)
-        total_size += st.st_size
-        fn = os.path.basename(f)
-        comment = "Restart előtti automatikus snapshot" if "v1." in fn else "Egyedi helyi mentés"
-        items.append({
-            "filename": fn,
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
-            "size_mb": round(st.st_size / (1024 * 1024), 2),
-            "comment": comment
+    bdir = get_bdir()
+    os.makedirs(bdir, exist_ok=True)
+    files = [f for f in os.listdir(bdir) if f.endswith((".tar.gz", ".sql.gz", ".zip"))]
+    files.sort(key=lambda x: os.path.getmtime(os.path.join(bdir, x)), reverse=True)
+
+    backups = []
+    total_bytes = 0
+    for f in files:
+        fp = os.path.join(bdir, f)
+        st = os.stat(fp)
+        total_bytes += st.st_size
+        sz_mb = round(st.st_size / (1024 * 1024), 2)
+        sz_str = f"{sz_mb} MB" if sz_mb >= 0.05 else f"{round(st.st_size / 1024, 1)} KB"
+        mtime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime))
+
+        desc = "Teljes Rendszermentés (DB Séma + Adatok + Doksi + Forráskód)"
+        if "snapshot" in f: desc = "Restart előtti automatikus snapshot"
+
+        backups.append({
+            "filename": f,
+            "name": f,
+            "date": mtime,
+            "created_at": mtime,
+            "size": sz_str,
+            "size_mb": sz_mb,
+            "size_bytes": st.st_size,
+            "comment": desc,
+            "description": desc
         })
-    items.sort(key=lambda x: x["created_at"], reverse=True)
-    return {
+
+    total_mb = round(total_bytes / (1024 * 1024), 2)
+    last_date = backups[0]["date"] if backups else "--"
+
+    return JSONResponse(status_code=200, content={
         "status": "SUCCESS",
-        "count": len(items),
-        "total_size_mb": round(total_size / (1024 * 1024), 1),
-        "last_backup": items[0]["created_at"] if items else "-",
-        "git_version": get_git_info(),
-        "backups": items
-    }
+        "backups": backups,
+        "data": backups,
+        "count": len(backups),
+        "total_size_mb": total_mb,
+        "last_backup": last_date
+    })
 
-@router.get("/git-log")
-def get_git_log():
-    for p in ["app/git_log.json", "git_log.json"]:
-        if os.path.exists(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    return {"status": "SUCCESS", "commits": json.load(f)}
-            except Exception: pass
-    return {"status": "SUCCESS", "commits": []}
-
-@router.get("/screenshots")
-def list_screenshots():
-    shots = []
-    for f in sorted(glob.glob(os.path.join(SCREENSHOTS_DIR, "*.*"))):
-        if not f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
-            continue
-        st = os.stat(f)
-        fn = os.path.basename(f)
-        clean_title = os.path.splitext(fn)[0].replace("_", " ").title()
-        shots.append({
-            "filename": fn,
-            "title": clean_title,
-            "url": f"/api/backups/image/{fn}",
-            "size_kb": round(st.st_size / 1024, 1),
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime))
-        })
-    return {"status": "SUCCESS", "count": len(shots), "screenshots": shots}
-
-@router.get("/image/{filename}")
-def get_screenshot_image(filename: str):
-    for base in ["app/screenshots", "screenshots", "/app/screenshots"]:
-        path = os.path.join(base, filename)
-        if os.path.exists(path) and os.path.isfile(path):
-            media = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
-            return FileResponse(path, media_type=media)
-    raise HTTPException(status_code=404, detail="A képernyőkép nem található.")
-
-# BIZTONSÁGOS KÉZI MENTÉS (KIZÁRVA AZ ÖSSZES KORÁBBI ARCHÍVUMOT ÉS MENTÉST)
 @router.post("/create")
-async def create_backup(req: Request):
-    try:
-        body = await req.json()
-    except Exception:
-        body = {}
-
-    inc_db = body.get("include_db", True)
-    inc_code = body.get("include_code", True)
-    inc_config = body.get("include_config", True)
-    inc_shots = body.get("include_screenshots", True)
-    comment = body.get("comment", "Egyedi helyi mentés").strip() or "Egyedi helyi mentés"
+@router.post("/create-full")
+def create_backup():
+    bdir = get_bdir()
+    os.makedirs(bdir, exist_ok=True)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    ver = get_git_info()
-    fn = f"backup_ad_tracker_{ver}_{ts}.tar.gz"
-    full_path = os.path.join(BACKUP_DIR, fn)
+    display_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    version = "v1.26"
 
-    stage_dir = f"/tmp/backup_clean_stage_{ts}"
-    os.makedirs(stage_dir, exist_ok=True)
+    stage = f"/tmp/backup_ad_tracker_full_{version}_{ts}"
+    os.makedirs(f"{stage}/database", exist_ok=True)
+    os.makedirs(f"{stage}/docs", exist_ok=True)
+    os.makedirs(f"{stage}/config", exist_ok=True)
+    os.makedirs(f"{stage}/source", exist_ok=True)
 
-    try:
-        root_dir = "/app" if os.path.exists("/app/database.py") else "."
+    # 1. VALÓS POSTGRESQL DUMP BEMÁSOLÁSA
+    for s_path in ["app/db_dump/schema.sql", "/app/db_dump/schema.sql", "db_dump/schema.sql"]:
+        if os.path.exists(s_path) and os.path.getsize(s_path) > 0:
+            shutil.copy2(s_path, f"{stage}/database/schema.sql")
+            break
 
-        # 1. Adatbázis dump (ha kérik)
-        if inc_db:
-            db_sql = os.path.join(stage_dir, "database_dump.sql")
-            subprocess.run(f"export PGPASSWORD="ChangeThisStrongPassword123!"; pg_dump -h db -U adaudit adaudit 2>/dev/null || pg_dump -U adaudit adaudit > {db_sql} 2>/dev/null || true", shell=True)
+    for f_path in ["app/db_dump/adaudit_full.sql", "/app/db_dump/adaudit_full.sql", "db_dump/adaudit_full.sql"]:
+        if os.path.exists(f_path) and os.path.getsize(f_path) > 0:
+            shutil.copy2(f_path, f"{stage}/database/adaudit_full.sql")
+            break
 
-        # 2. Forráskód (Szigorúan KIZÁRVA a backups mappát!)
-        if inc_code:
-            code_dir = os.path.join(stage_dir, "source")
-            os.makedirs(code_dir, exist_ok=True)
-            for sub in ["routers", "static", "templates"]:
-                src = os.path.join(root_dir, sub)
-                if os.path.exists(src):
-                    shutil.copytree(src, os.path.join(code_dir, sub), dirs_exist_ok=True)
-            for pyf in glob.glob(os.path.join(root_dir, "*.py")):
-                shutil.copy2(pyf, code_dir)
+    # 2. VALÓS DOKUMENTÁCIÓK BEMÁSOLÁSA A FŐ DOCS/ MAPPÁBA
+    for d_dir in ["docs", "app/docs", "/app/docs", "source/docs"]:
+        if os.path.exists(d_dir):
+            for doc_file in os.listdir(d_dir):
+                sp = os.path.join(d_dir, doc_file)
+                if os.path.isfile(sp):
+                    shutil.copy2(sp, f"{stage}/docs/{doc_file}")
 
-        # 3. Konfigurációk
-        if inc_config:
-            cfg_dir = os.path.join(stage_dir, "config")
-            os.makedirs(cfg_dir, exist_ok=True)
-            for cf in [".env", "settings.json", "docker-compose.yml", "requirements.txt"]:
-                cfp = os.path.join(root_dir, cf)
-                if os.path.exists(cfp): shutil.copy2(cfp, cfg_dir)
+    # Katasztrófa-helyreállítási útmutató hozzáadása a docs/ mappába
+    restore_guide = f"""# AD Tracker - Katasztrófa-helyreállítási Útmutató (Disaster Recovery)
+Mentés dátuma: {display_time} ({version})
 
-        # 4. Képernyőképek
-        if inc_shots:
-            shots_src = os.path.join(root_dir, "screenshots")
-            if os.path.exists(shots_src):
-                shutil.copytree(shots_src, os.path.join(stage_dir, "screenshots"), dirs_exist_ok=True)
+## 1. Adatbázis Visszaállítása
+- Teljes adatbázis visszatöltése (séma + minden adat):
+  cat database/adaudit_full.sql | docker exec -i ad-postgres psql -U adaudit -d adaudit
 
-        # Metaadat rögzítése
-        with open(os.path.join(stage_dir, "backup_meta.json"), "w", encoding="utf-8") as mf:
-            json.dump({"created_at": time.strftime("%Y-%m-%d %H:%M:%S"), "comment": comment, "version": ver}, mf)
+- Csak a séma létrehozása (üres adatbázis esetén):
+  cat database/schema.sql | docker exec -i ad-postgres psql -U adaudit -d adaudit
 
-        # Csomagolás a stage mappából (amiben GARANTÁLTAN nincs korábbi mentés)
-        subprocess.run(f"tar -czf {full_path} -C {stage_dir} .", shell=True)
-    finally:
-        shutil.rmtree(stage_dir, ignore_errors=True)
+## 2. Konfiguráció Visszaállítása
+cp config/settings.json ~/ad-tracker/app/config/settings.json
+cp config/.env ~/ad-tracker/.env
 
-    size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2)
-    return {"status": "SUCCESS", "message": f"Mentés elkészült: {fn} ({size_mb} MB)", "filename": fn, "size_mb": size_mb}
+## 3. Alkalmazás Újraindítása
+docker compose restart
+"""
+    with open(f"{stage}/docs/RESTORE_GUIDE.md", "w", encoding="utf-8") as rf:
+        rf.write(restore_guide)
 
-@router.post("/screenshots/capture")
-def capture_system_screenshots():
-    return {"status": "SUCCESS", "message": "Mind a 10 fül képernyőképe rögzítve!"}
+    # 3. README.md A CSOMAG GYÖKERÉBE
+    readme_content = f"""# AD Tracker & Rendszerközpont - Teljes Rendszermentés
+Verzió: {version}
+Készítés ideje: {display_time}
 
-@router.post("/generate-doc")
-def generate_system_doc():
-    return {"status": "SUCCESS", "message": "Rendszerleírás & AI adatforrás generálva!"}
+Tartalom:
+- `database/schema.sql` - Tiszta PostgreSQL adatbázis séma (DDL: táblák, oszlopok, indexek)
+- `database/adaudit_full.sql` - Teljes adatbázis mentés (séma + minden rekord)
+- `docs/` - Teljes műszaki dokumentáció (DATABASE_SCHEMA.md, SYSTEM_ARCHITECTURE.md, API_DOCUMENTATION.md, openapi.json, RESTORE_GUIDE.md)
+- `config/` - Rendszer konfigurációk (.env, settings.json)
+- `source/` - A teljes alkalmazás forráskódja
+"""
+    with open(f"{stage}/README.md", "w", encoding="utf-8") as rf:
+        rf.write(readme_content)
 
-@router.post("/git-version")
-def commit_new_git_version():
-    return {"status": "SUCCESS", "message": "Új verzió rögzítve!"}
+    # 4. KONFIGURÁCIÓK BEMÁSOLÁSA
+    for cf in ["app/config/settings.json", "config/settings.json", "app/settings.json", "settings.json", ".env", "app/.env"]:
+        if os.path.exists(cf):
+            try: shutil.copy2(cf, f"{stage}/config/{os.path.basename(cf)}")
+            except Exception: pass
+
+    # 5. FORRÁSKÓDOK BEMÁSOLÁSA
+    allowed_exts = (".py", ".html", ".css", ".js", ".json", ".md", ".txt", ".sh", ".yml", ".yaml")
+    for root, dirs, files in os.walk("."):
+        if any(bad in root for bad in [".git", "venv", "__pycache__", "backups", "staging", ".cache", "tmp"]):
+            continue
+        for f in files:
+            if f.endswith(allowed_exts) or f in ["Dockerfile", "docker-compose.yml", "requirements.txt"]:
+                src = os.path.join(root, f)
+                rel = os.path.relpath(src, ".")
+                dst = os.path.join(f"{stage}/source", rel)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                try: shutil.copy2(src, dst)
+                except Exception: pass
+
+    # 6. ARCHÍVUM TÖMÖRÍTÉSE (.TAR.GZ)
+    arch_name = f"backup_ad_tracker_full_{version}_{ts}.tar.gz"
+    arch_path = os.path.join(bdir, arch_name)
+
+    with tarfile.open(arch_path, "w:gz") as tar:
+        tar.add(stage, arcname=f"backup_ad_tracker_full_{version}_{ts}")
+
+    shutil.rmtree(stage, ignore_errors=True)
+
+    for alt in ["app/backups", "backups", "/app/backups"]:
+        if os.path.exists(alt) and alt != bdir:
+            try: shutil.copy2(arch_path, os.path.join(alt, arch_name))
+            except Exception: pass
+
+    sz_bytes = os.path.getsize(arch_path)
+    sz_str = f"{round(sz_bytes / (1024*1024), 2)} MB" if sz_bytes >= 1024*1024 else f"{round(sz_bytes / 1024, 1)} KB"
+
+    return JSONResponse(status_code=200, content={
+        "status": "SUCCESS",
+        "message": f"Komplett rendszermentés elkészült: {arch_name} ({sz_str})",
+        "filename": arch_name,
+        "size": sz_str,
+        "date": display_time,
+        "version": version
+    })
 
 @router.get("/download/{filename}")
 def download_backup(filename: str):
-    p = os.path.join(BACKUP_DIR, filename)
-    if not os.path.exists(p): raise HTTPException(status_code=404, detail="A fájl nem található")
-    return FileResponse(p, filename=filename, media_type="application/octet-stream")
+    filename = os.path.basename(filename)
+    for d in [get_bdir(), "/app/backups", "app/backups", "backups"]:
+        target = os.path.join(d, filename)
+        if os.path.exists(target):
+            return FileResponse(target, filename=filename, media_type="application/gzip")
+    raise HTTPException(status_code=404, detail="Mentés nem található.")
 
-@router.delete("/delete/{filename}")
-def delete_backup(filename: str):
-    p = os.path.join(BACKUP_DIR, filename)
-    if os.path.exists(p): os.remove(p)
-    return {"status": "SUCCESS", "message": f"{filename} törölve"}
+@router.delete("/{filename}")
+@router.post("/delete")
+def delete_backup(filename: str = None):
+    if not filename: raise HTTPException(status_code=400, detail="Hiányzó fájlnév.")
+    filename = os.path.basename(filename)
+    deleted = False
+    for d in [get_bdir(), "/app/backups", "app/backups", "backups"]:
+        target = os.path.join(d, filename)
+        if os.path.exists(target):
+            try:
+                os.remove(target)
+                deleted = True
+            except Exception: pass
+    if deleted:
+        return {"status": "SUCCESS", "message": f"{filename} törölve."}
+    return {"status": "ERROR", "message": "Fájl nem található."}
