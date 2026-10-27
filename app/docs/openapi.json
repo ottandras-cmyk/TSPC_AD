@@ -1,0 +1,967 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AD Tracker",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/static/{file_path}": {
+      "get": {
+        "summary": "Serve Static",
+        "operationId": "serve_static_static__file_path__get",
+        "parameters": [
+          {
+            "name": "file_path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Get All Users",
+        "operationId": "get_all_users_api_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{sam}/history": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Get User History",
+        "operationId": "get_user_history_api_users__sam__history_get",
+        "parameters": [
+          {
+            "name": "sam",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sam"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Get All Groups",
+        "operationId": "get_all_groups_api_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ad-analytics/summary": {
+      "get": {
+        "tags": [
+          "ad-analytics"
+        ],
+        "summary": "Api Ad Analytics Summary",
+        "operationId": "api_ad_analytics_summary_api_ad_analytics_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ad-analytics/day-events": {
+      "get": {
+        "tags": [
+          "ad-analytics"
+        ],
+        "summary": "Api Ad Analytics Day Events",
+        "operationId": "api_ad_analytics_day_events_api_ad_analytics_day_events_get",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Date"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "ALL",
+              "title": "Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ad-analytics/ask": {
+      "post": {
+        "tags": [
+          "ad-analytics"
+        ],
+        "summary": "Api Ad Analytics Ask",
+        "operationId": "api_ad_analytics_ask_api_ad_analytics_ask_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/live": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Api Telemetry Live",
+        "operationId": "api_telemetry_live_api_telemetry_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/sessions": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Api Telemetry Sessions",
+        "operationId": "api_telemetry_sessions_api_telemetry_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/history": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Api Telemetry History",
+        "operationId": "api_telemetry_history_api_telemetry_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/web-logs": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Api Telemetry Web Logs",
+        "operationId": "api_telemetry_web_logs_api_telemetry_web_logs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/host-ip-history": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Api Telemetry Host Ip History",
+        "operationId": "api_telemetry_host_ip_history_api_telemetry_host_ip_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry/collect": {
+      "post": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Api Telemetry Collect",
+        "operationId": "api_telemetry_collect_api_telemetry_collect_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync-status": {
+      "get": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Get Sync Status",
+        "operationId": "get_sync_status_api_sync_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync-history": {
+      "get": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Get Sync History",
+        "operationId": "get_sync_history_api_sync_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync": {
+      "post": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Trigger Sync Manual",
+        "operationId": "trigger_sync_manual_api_sync_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/upload-files": {
+      "post": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Api History Upload Files",
+        "operationId": "api_history_upload_files_api_history_upload_files_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_api_history_upload_files_api_history_upload_files_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/scan": {
+      "post": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Api History Scan",
+        "operationId": "api_history_scan_api_history_scan_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/backfill": {
+      "post": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Api History Backfill",
+        "operationId": "api_history_backfill_api_history_backfill_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/import": {
+      "post": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Api History Import",
+        "operationId": "api_history_import_api_history_import_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/progress": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Api History Progress",
+        "operationId": "api_history_progress_api_history_progress_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Get Backups List",
+        "operationId": "get_backups_list_api_backups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups/create": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Create Backup Endpoint",
+        "operationId": "create_backup_endpoint_api_backups_create_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups/restore": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Restore Backup Endpoint",
+        "operationId": "restore_backup_endpoint_api_backups_restore_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups/download/{filename}": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Download Backup Endpoint",
+        "operationId": "download_backup_endpoint_api_backups_download__filename__get",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups/{filename}": {
+      "delete": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Delete Backup Endpoint",
+        "operationId": "delete_backup_endpoint_api_backups__filename__delete",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/github/version": {
+      "get": {
+        "tags": [
+          "github"
+        ],
+        "summary": "Api Gh Get Version",
+        "operationId": "api_gh_get_version_api_github_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/github/test": {
+      "post": {
+        "tags": [
+          "github"
+        ],
+        "summary": "Api Gh Test",
+        "operationId": "api_gh_test_api_github_test_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/github/history": {
+      "get": {
+        "tags": [
+          "github"
+        ],
+        "summary": "Api Gh History",
+        "operationId": "api_gh_history_api_github_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/github/push": {
+      "post": {
+        "tags": [
+          "github"
+        ],
+        "summary": "Api Gh Push",
+        "operationId": "api_gh_push_api_github_push_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/models": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Get Ai Models",
+        "operationId": "get_ai_models_api_ai_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/ask": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Ask Ai Endpoint",
+        "operationId": "ask_ai_endpoint_api_ai_ask_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Save Settings",
+        "operationId": "save_settings_api_settings_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login": {
+      "get": {
+        "summary": "Login Page",
+        "operationId": "login_page_login_get",
+        "parameters": [
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Process Login",
+        "operationId": "process_login_login_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_process_login_login_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logout": {
+      "get": {
+        "summary": "Process Logout",
+        "operationId": "process_logout_logout_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Index Page",
+        "operationId": "index_page__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_api_history_upload_files_api_history_upload_files_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_api_history_upload_files_api_history_upload_files_post"
+      },
+      "Body_process_login_login_post": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_process_login_login_post"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

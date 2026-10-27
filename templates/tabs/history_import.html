@@ -1,0 +1,17 @@
+<div class="card-box">
+    <h4>PowerShell CSV Mentések Betöltése</h4>
+    <input type="file" id="client_folder_picker" webkitdirectory directory multiple style="display:none;" onchange="handleClientFolderSelect(this)">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button class="btn" onclick="triggerClientFolderPicker()">📁 Mappa Tallózása a Saját Gépemen</button>
+        <span>vagy szerver mappa:</span>
+        <input type="text" id="history_folder_input" value="csv_imports" style="width:140px; margin:0;">
+        <button class="btn" style="background:#475569;" onclick="scanServerFolder()">Szerver Mappa Vizsgálata</button>
+        <button class="btn" style="background:#d97706;" onclick="doQuickBackfill()">⚡ Meglévő Adatok Frissítése (Backfill)</button>
+        <button id="startHistoryBtn" class="btn" style="background:#16a34a; margin-left:auto;" disabled onclick="startHistoryImport()">Történeti Idővonal Újraépítése</button>
+    </div>
+    <div id="history_scan_info" style="margin-top:10px; font-size:13px; color:#475569;">Tallózzon a fenti gombokkal.</div>
+</div>
+<table>
+    <thead><tr><th>Dátum</th><th>Időbélyeg Minta</th><th>Fájlok Száma</th><th>Csoportfájl</th></tr></thead>
+    <tbody id="historyTableBody"></tbody>
+</table>

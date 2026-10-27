@@ -1,0 +1,15 @@
+0000000000000000000000000000000000000000 de690c86b3b1a9dd7165fa764a186ae74de77dc3 AD Tracker System <adtracker@tspc.hu> 1793103758 +0000	commit (initial): Release v1.12 kiadás (2026-10-27 12:22)
+de690c86b3b1a9dd7165fa764a186ae74de77dc3 0000000000000000000000000000000000000000 AD Tracker System <adtracker@tspc.hu> 1793103925 +0000	Branch: renamed refs/heads/master to refs/heads/main
+0000000000000000000000000000000000000000 de690c86b3b1a9dd7165fa764a186ae74de77dc3 AD Tracker System <adtracker@tspc.hu> 1793103925 +0000	Branch: renamed refs/heads/master to refs/heads/main
+de690c86b3b1a9dd7165fa764a186ae74de77dc3 5750d2263af8ea96f35f010970040c9c0d5724ae AD Tracker System <adtracker@tspc.hu> 1793105396 +0000	commit: v1.13: Release v1.13 frissítés (2026-10-27 12:49)
+5750d2263af8ea96f35f010970040c9c0d5724ae 1a0c9babd9595239e9d0ea3b171aa3ef4d07baf8 AD Tracker System <adtracker@tspc.hu> 1793105867 +0000	commit: v1.14: Release v1.14 frissítés (2026-10-27 12:57)
+1a0c9babd9595239e9d0ea3b171aa3ef4d07baf8 4930600dc7e5b55e282b145dc0d179b3b53f47d6 AD Tracker System <adtracker@tspc.hu> 1793105948 +0000	commit: v1.15: Release v1.15 frissítés (2026-10-27 12:59)
+4930600dc7e5b55e282b145dc0d179b3b53f47d6 4930600dc7e5b55e282b145dc0d179b3b53f47d6 AD Tracker System <adtracker@tspc.hu> 1793106209 +0000	reset: moving to HEAD
+4930600dc7e5b55e282b145dc0d179b3b53f47d6 0000000000000000000000000000000000000000 AD Tracker System <adtracker@tspc.hu> 1793106209 +0000	Branch: renamed refs/heads/main to refs/heads/main
+4930600dc7e5b55e282b145dc0d179b3b53f47d6 4930600dc7e5b55e282b145dc0d179b3b53f47d6 AD Tracker System <adtracker@tspc.hu> 1793106209 +0000	Branch: renamed refs/heads/main to refs/heads/main
+0000000000000000000000000000000000000000 17e093034e1cc31650eaee8cd64c21a69c37dd63 ottandras-cmyk <adtracker@tspc.hu> 1793106692 +0000	commit (initial): v1.19: AD Tracker v1.11 tiszta forraskod feltoltese (2026-10-27 13:11)
+0000000000000000000000000000000000000000 defad533a30032669a7062e556108724b54593b3 ottandras-cmyk <adtracker@tspc.hu> 1793106902 +0000	commit (initial): v1.20: AD Tracker v1.11 tiszta forraskod feltoltese (2026-10-27 13:15)
+defad533a30032669a7062e556108724b54593b3 c3fef53afe08df08ccdb283e07eaf6f464c2f444 ottandras-cmyk <adtracker@tspc.hu> 1793106945 +0000	commit: v1.21: Release v1.21 frissítés (2026-10-27 13:15)
+0000000000000000000000000000000000000000 a7e28c6fb3eaab2b65a17b9ed325629e2e8b9af5 ottandras-cmyk <adtracker@tspc.hu> 1793107120 +0000	commit (initial): v1.22: AD Tracker v1.11 tiszta forraskod feltoltese (2026-10-27 13:18)
+0000000000000000000000000000000000000000 2729f168f0f40ae634757edf5427d845e7ba47a7 ottandras-cmyk <adtracker@tspc.hu> 1793107257 +0000	commit (initial): v1.23: AD Tracker v1.11 - Tiszta release feltoltese (2026-10-27 13:20)
+2729f168f0f40ae634757edf5427d845e7ba47a7 a6923705036c6848b7c6697cf76aa16f55e77898 ottandras-cmyk <adtracker@tspc.hu> 1793107282 +0000	commit: v1.24: Release v1.24 frissítés (2026-10-27 13:21)

@@ -1,0 +1,14 @@
+{
+  "EP_URL": "https://ep.tspc.hu/",
+  "EP_API_KEY": "",
+  "EP_PROJECT_ID": "2403",
+  "EP_SYNC_INTERVAL_MINUTES": 15,
+  "AD_SERVER": "dc1.tspc.hu:389",
+  "AD_BASE_DN": "DC=tspc,DC=hu",
+  "AD_BIND_USER": "",
+  "AD_BIND_PASSWORD": "",
+  "AD_SYNC_INTERVAL_MINUTES": 15,
+  "TG_BOT_TOKEN": "",
+  "TG_CHAT_ID": "",
+  "GITHUB_TOKEN": ""
+}

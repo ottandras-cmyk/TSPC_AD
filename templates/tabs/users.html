@@ -1,0 +1,207 @@
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex; gap:8px;">
+        <button id="btnSubUsersTab" class="btn" style="background:#0284c7; color:white; padding:7px 16px; font-weight:bold; border-radius:6px; font-size:12.5px;" onclick="switchUsersSubTab('users')">
+            👤 Felhasználók (<span id="u_tab_badge">0
+        <button id="btnSubGroupsTab" class="btn" style="background:#f1f5f9; color:#334155; padding:7px 16px; font-weight:bold; border-radius:6px; font-size:12.5px;" onclick="switchUsersSubTab('groups')">
+            👥 AD Csoportok (<span id="g_tab_badge">0
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+        <span id="usersStatusBadge" style="background:#dcfce7; color:#15803d; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:bold;">
+            🟢 Készenlétben
+        </span>
+        <button class="btn" style="background:#0284c7; color:white; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="loadUsersAndGroups()">
+            🔄 Frissítés
+        </button>
+        <button class="btn" style="background:#16a34a; color:white; padding:6px 16px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="triggerManualSync()">
+            ⚡ AD Letöltés & Szinkron
+        </button>
+    </div>
+</div>
+
+<!-- KPI MÉRŐKÁRTYÁK -->
+<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:14px; margin-bottom:14px;">
+    <div class="card-box" style="margin:0; border-left:4px solid #0284c7; background:white;">
+        <small style="color:#64748b; font-weight:bold; font-size:11.5px;">Összes AD Felhasználó</small>
+        <h3 id="u_kpi_total" style="margin:6px 0 0 0; color:#0284c7; font-size:22px;">0 fő</h3>
+    </div>
+    <div class="card-box" style="margin:0; border-left:4px solid #16a34a; background:white;">
+        <small style="color:#64748b; font-weight:bold; font-size:11.5px;">Aktív Fiókok</small>
+        <h3 id="u_kpi_active" style="margin:6px 0 0 0; color:#16a34a; font-size:22px;">0 fő</h3>
+    </div>
+    <div class="card-box" style="margin:0; border-left:4px solid #ef4444; background:white;">
+        <small style="color:#64748b; font-weight:bold; font-size:11.5px;">Letiltott Fiókok</small>
+        <h3 id="u_kpi_disabled" style="margin:6px 0 0 0; color:#ef4444; font-size:22px;">0 fő</h3>
+    </div>
+    <div class="card-box" style="margin:0; border-left:4px solid #6366f1; background:white;">
+        <small style="color:#64748b; font-weight:bold; font-size:11.5px;">AD Csoportok Száma</small>
+        <h3 id="u_kpi_groups" style="margin:6px 0 0 0; color:#6366f1; font-size:22px;">0 db</h3>
+    </div>
+</div>
+
+<!-- 1. NÉZET: FELHASZNÁLÓK -->
+<div id="viewUsersBox">
+    <div class="card-box" style="background:white; padding:12px 16px; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+            <div style="flex:1; min-width:300px;">
+                <input type="search" id="userGlobalSearch" autocomplete="off" placeholder="🔍 Globális gyorskeresés név, SAM azonosító, email, beosztás vagy osztály szerint..." style="margin:0; padding:8px 12px; font-size:13px;" onkeyup="filterAndSortUsers()">
+            </div>
+            <button class="btn" style="background:#f1f5f9; color:#475569; padding:7px 14px; font-size:12px; border-radius:6px;" onclick="resetUserFilters()">
+                Szűrők Törlése
+            </button>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; font-size:12px;">
+            <div>
+                <label style="margin-bottom:3px; font-size:11.5px; font-weight:600; color:#475569;">🚦 Fiók Státusz:</label>
+                <select id="userFilterStatus" style="margin:0; padding:6px; font-size:12px;" onchange="filterAndSortUsers()">
+                    <option value="ALL">Minden fiók (Aktív és Letiltott)</option>
+                    <option value="ACTIVE">Csak Aktív fiókok</option>
+                    <option value="DISABLED">Csak Letiltott fiókok</option>
+                </select>
+            </div>
+            <div>
+                <label style="margin-bottom:3px; font-size:11.5px; font-weight:600; color:#475569;">🏢 Osztály / Részleg:</label>
+                <select id="userFilterDept" style="margin:0; padding:6px; font-size:12px;" onchange="filterAndSortUsers()">
+                    <option value="ALL">Minden osztály</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div id="userPaginationTop" class="card-box" style="background:#ffffff; padding:8px 16px; margin-bottom:8px; border-left:4px solid #0284c7;"></div>
+
+    <div class="card-box" style="background:white; padding:12px 16px; overflow-x:auto; margin-bottom:8px;">
+        <table>
+            <thead>
+                <tr>
+                    <th onclick="sortUsersBy('display_name')" style="cursor:pointer; width:220px;">Név / Forráscímke <span id="u_sort_display_name" style="color:#0284c7; font-weight:bold;">▲</span></th>
+                    <th onclick="sortUsersBy('sam_account_name')" style="cursor:pointer; width:150px;">Azonosító (SAM) <span id="u_sort_sam_account_name">⇅</span></th>
+                    <th onclick="sortUsersBy('mail')" style="cursor:pointer; width:220px;">Email <span id="u_sort_mail">⇅</span></th>
+                    <th onclick="sortUsersBy('department')" style="cursor:pointer; width:180px;">Besorolás / Osztály <span id="u_sort_department">⇅</span></th>
+                    <th onclick="sortUsersBy('title')" style="cursor:pointer; width:180px;">Titulus / Beosztás <span id="u_sort_title">⇅</span></th>
+                    <th onclick="sortUsersBy('last_logon')" style="cursor:pointer; width:150px;">Utolsó belépés <span id="u_sort_last_logon">⇅</span></th>
+                    <th style="text-align:right; width:85px;">Művelet</th>
+                </tr>
+                <tr style="background:#f8fafc;">
+                    <th style="padding:4px;"><input type="text" class="u-col-filter" data-col="display_name" placeholder="Név..." onkeyup="filterAndSortUsers()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                    <th style="padding:4px;"><input type="text" class="u-col-filter" data-col="sam_account_name" placeholder="SAM..." onkeyup="filterAndSortUsers()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                    <th style="padding:4px;"><input type="text" class="u-col-filter" data-col="mail" placeholder="Email..." onkeyup="filterAndSortUsers()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                    <th style="padding:4px;"><input type="text" class="u-col-filter" data-col="department" placeholder="Osztály..." onkeyup="filterAndSortUsers()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                    <th style="padding:4px;"><input type="text" class="u-col-filter" data-col="title" placeholder="Beosztás..." onkeyup="filterAndSortUsers()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                    <th style="padding:4px;"><input type="text" class="u-col-filter" data-col="last_logon" placeholder="Dátum..." onkeyup="filterAndSortUsers()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                    <th style="text-align:right; padding:4px;"><button class="btn" onclick="clearUserColFilters()" style="background:#e2e8f0; color:#475569; padding:2px 6px; font-size:11px;">✕ Törlés</button></th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:20px; color:#94a3b8;">Felhasználók betöltése...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="userPaginationBottom" class="card-box" style="background:#ffffff; padding:8px 16px; margin-top:8px; border-left:4px solid #0284c7;"></div>
+</div>
+
+<!-- 2. NÉZET: AD CSOPORTOK -->
+<div id="viewGroupsBox" style="display:none;">
+    <div class="card-box" style="background:white; padding:10px 14px; margin-bottom:10px;">
+        <input type="search" id="groupGlobalSearch" autocomplete="off" placeholder="🔍 Keresés csoport neve, hatóköre vagy leírása szerint..." style="margin:0; padding:8px 12px; font-size:13px; width:100%; box-sizing:border-box;" onkeyup="filterAndSortGroups()">
+    </div>
+
+    <div id="groupPaginationTop" class="card-box" style="background:#ffffff; padding:8px 16px; margin-bottom:8px; border-left:4px solid #6366f1;"></div>
+
+    <div class="card-box" style="background:white; padding:12px 16px; overflow-x:auto; margin-bottom:8px;">
+        <table>
+            <thead>
+                <tr>
+                    <th onclick="sortGroupsBy('sam_account_name')" style="cursor:pointer; width:260px;">Csoport Név <span id="g_sort_sam_account_name" style="color:#0284c7; font-weight:bold;">▲</span></th>
+                    <th onclick="sortGroupsBy('group_scope')" style="cursor:pointer; width:140px;">Hatókör (Scope) <span id="g_sort_group_scope">⇅</span></th>
+                    <th onclick="sortGroupsBy('description')" style="cursor:pointer;">Leírás <span id="g_sort_description">⇅</span></th>
+                    <th>Distinguished Name (DN)</th>
+                    <th style="text-align:right; width:120px;">Művelet</th>
+                </tr>
+            </thead>
+            <tbody id="groupsTableBody">
+                <tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8;">Csoportok betöltése...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="groupPaginationBottom" class="card-box" style="background:#ffffff; padding:8px 16px; margin-top:8px; border-left:4px solid #6366f1;"></div>
+</div>
+
+<!-- FELHASZNÁLÓ RÉSZLETES ADATLAP MODAL -->
+<div id="adUserDetailModal" class="modal" style="display:none; pointer-events:none;">
+    <div class="modal-content" style="max-width:820px; border-radius:10px;">
+        <div class="modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:14px 20px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span id="mdl_u_status_badge" style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:12px;">Aktív</span>
+                <h3 id="mdl_u_name" style="margin:0; font-size:17px; color:#0f172a;">Felhasználó Adatlap</h3>
+            </div>
+            <button class="modal-close" onclick="closeUserDetailModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:20px; max-height:calc(85vh - 70px); overflow-y:auto;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:15px; margin-bottom:15px; font-size:13px;">
+                <div>👤 <b>SAM Fióknév:</b> <code id="mdl_u_sam" style="color:#0284c7; font-weight:bold;">-</code></div>
+                <div>📧 <b>Email:</b> <span id="mdl_u_mail">-</span></div>
+                <div>🏢 <b>Osztály / Besorolás:</b> <span id="mdl_u_dept">-</span></div>
+                <div>💼 <b>Beosztás:</b> <span id="mdl_u_title">-</span></div>
+                <div>📞 <b>Telefonszám:</b> <span id="mdl_u_phone">-</span></div>
+                <div>🕒 <b>Utolsó belépés:</b> <span id="mdl_u_logon">-</span></div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <b style="font-size:12.5px; color:#334155;">Distinguished Name (DN):</b>
+                <div id="mdl_u_dn" style="background:#f1f5f9; padding:8px 12px; border-radius:6px; font-size:11.5px; font-family:monospace; word-break:break-all; margin-top:4px; color:#334155;">-</div>
+            </div>
+
+            <!-- KATTINTHATÓ CSOPORTTAGSÁGOK -->
+            <div style="margin-bottom:18px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <b style="font-size:13px; color:#0f172a; display:flex; align-items:center; gap:6px;">
+                        👥 Active Directory Csoporttagságok (<span id="mdl_u_group_count">0</span> db)
+                    </b>
+                    <small style="color:#64748b; font-size:11px;">Kattintson egy csoportra a csoport tagjainak megtekintéséhez</small>
+                </div>
+                <div id="mdl_u_groups_list" style="display:flex; flex-wrap:wrap; gap:8px; padding:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; min-height:45px; align-items:center;">
+                    <span style="color:#94a3b8; font-size:12px;">Csoportok betöltése...</span>
+                </div>
+            </div>
+
+            <!-- AUDIT ELŐZMÉNYEK ÉS ESEMÉNYEK IDŐVONAL -->
+            <div>
+                <b style="font-size:13px; color:#0f172a; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                    📜 Fiók Előzmények, Változások & Rendszertörténések
+                </b>
+                <div id="mdl_u_history_list" style="max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; padding:8px; background:#ffffff;">
+                    <span style="color:#94a3b8; font-size:12px;">Előzmények betöltése...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CSOPORT RÉSZLETES ADATLAP MODAL -->
+<div id="adGroupDetailModal" class="modal" style="display:none; pointer-events:none;">
+    <div class="modal-content" style="max-width:780px; border-radius:10px;">
+        <div class="modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:14px 20px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span id="mdl_g_scope_badge" style="background:#e0e7ff; color:#4338ca; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:12px;">Global</span>
+                <h3 id="mdl_g_name" style="margin:0; font-size:17px; color:#0f172a;">AD Csoport Adatlap</h3>
+            </div>
+            <button class="modal-close" onclick="closeGroupDetailModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:20px; max-height:calc(85vh - 70px); overflow-y:auto;">
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px; margin-bottom:14px; font-size:13px;">
+                <div><b>Leírás:</b> <span id="mdl_g_desc">-</span></div>
+                <div style="margin-top:4px;"><b>Tagok száma:</b> <b id="mdl_g_member_count" style="color:#0284c7;">0 fő</b></div>
+            </div>
+
+            <b style="font-size:13px; color:#0f172a; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                👤 Csoport Tagjai (kattintson bármelyik személyre az adatlapjához):
+            </b>
+            <div id="mdl_g_members_list" style="max-height:300px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; background:#ffffff;">
+                <div style="padding:15px; text-align:center; color:#94a3b8;">Tagok betöltése...</div>
+            </div>
+        </div>
+    </div>
+</div>
