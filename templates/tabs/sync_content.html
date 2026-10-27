@@ -1,0 +1,101 @@
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <h3 style="margin:0; font-size:16px; color:#0f172a;">Rendszer Szinkronizálási & Kinyerési Eseménynapló</h3>
+        <span id="syncStatusIndicator" style="background:#dcfce7; color:#15803d; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:bold;">
+            🟢 Készenlétben
+        </span>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn" style="background:#0284c7; color:white; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="loadSyncHistory()">
+            🔄 Frissítés
+        </button>
+        <button class="btn" style="background:#16a34a; color:white; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="triggerManualSync()">
+            ⚡ AD Szinkronizálás
+        </button>
+        <button class="btn" style="background:#059669; color:white; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="triggerEpManualSync()">
+            ⚡ EP Projektek Kinyerése
+        </button>
+        <button class="btn" style="background:#d97706; color:white; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="syncHelpdeskNow()">
+            ⚡ Összes Hibajegy Kinyerése Most
+        </button>
+    </div>
+</div>
+
+<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+    <button id="btnSyncFilterAll" class="btn" style="background:#0284c7; color:white; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="filterSyncHistory('ALL')">
+        🌐 Összes Napló (<span id="cntSyncAll">0
+    <button id="btnSyncFilterAd" class="btn" style="background:#f1f5f9; color:#334155; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="filterSyncHistory('AD')">
+        📑 Csak Active Directory (<span id="cntSyncAd">0
+    <button id="btnSyncFilterEp" class="btn" style="background:#f1f5f9; color:#334155; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="filterSyncHistory('EASYPROJECT')">
+        📁 Csak EP Projektek (<span id="cntSyncEp">0
+    <button id="btnSyncFilterHd" class="btn" style="background:#f1f5f9; color:#334155; padding:6px 14px; font-size:12px; border-radius:6px; font-weight:bold;" onclick="filterSyncHistory('HELPDESK')">
+        🎫 Csak EP Hibajegyek (<span id="cntSyncHd">0
+</div>
+
+<div class="card-box" style="background:white; padding:10px 14px; margin-bottom:8px;">
+    <input type="text" id="syncGlobalSearch" placeholder="🔍 Keresés indítás ideje, kiváltó ok, forrás, státusz vagy részletek szerint..." style="margin:0; padding:8px 12px; font-size:13px; width:100%; box-sizing:border-box;" onkeyup="filterAndSortSyncHistory()">
+</div>
+
+<div id="syncPaginationTop" class="card-box" style="background:#ffffff; padding:8px 16px; margin-bottom:8px; border-left:4px solid #0284c7;"></div>
+
+<div class="card-box" style="background:white; padding:12px 16px; overflow-x:auto; margin-bottom:8px;">
+    <table>
+        <thead>
+            <tr>
+                <th onclick="sortSyncBy('source')" style="cursor:pointer; width:140px;">Rendszer / Forrás <span id="sync_sort_source">⇅</span></th>
+                <th onclick="sortSyncBy('sort_dt')" style="cursor:pointer; width:160px;">Indítás Időpontja <span id="sync_sort_sort_dt" style="color:#0284c7; font-weight:bold;">▼</span></th>
+                <th onclick="sortSyncBy('ended')" style="cursor:pointer; width:160px;">Befejezés Időpontja <span id="sync_sort_ended">⇅</span></th>
+                <th onclick="sortSyncBy('duration_sec')" style="cursor:pointer; width:110px;">Időtartam <span id="sync_sort_duration_sec">⇅</span></th>
+                <th onclick="sortSyncBy('trigger')" style="cursor:pointer; width:120px;">Kiváltó ok <span id="sync_sort_trigger">⇅</span></th>
+                <th onclick="sortSyncBy('status')" style="cursor:pointer; width:110px;">Státusz <span id="sync_sort_status">⇅</span></th>
+                <th onclick="sortSyncBy('details')" style="cursor:pointer;">Észlelt Változások & Részletek <span id="sync_sort_details">⇅</span></th>
+                <th style="text-align:right; width:90px;">Művelet</th>
+            </tr>
+            <tr style="background:#f8fafc;">
+                <th style="padding:4px;"><select id="syncColFilterSource" class="sync-col-filter" data-col="source" onchange="filterAndSortSyncHistory()" style="font-size:11px; padding:3px 4px; margin:0; width:100%;"><option value="ALL">Mind</option><option value="AD">Active Directory</option><option value="EASYPROJECT">EP Projektek</option><option value="HELPDESK">EP Hibajegyek</option></select></th>
+                <th style="padding:4px;"><input type="text" class="sync-col-filter" data-col="started" placeholder="Dátum..." onkeyup="filterAndSortSyncHistory()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                <th style="padding:4px;"><input type="text" class="sync-col-filter" data-col="ended" placeholder="Dátum..." onkeyup="filterAndSortSyncHistory()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                <th style="padding:4px;"><input type="text" class="sync-col-filter" data-col="duration" placeholder="Idő..." onkeyup="filterAndSortSyncHistory()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                <th style="padding:4px;"><select id="syncColFilterTrigger" class="sync-col-filter" data-col="trigger" onchange="filterAndSortSyncHistory()" style="font-size:11px; padding:3px 4px; margin:0; width:100%;"><option value="ALL">Mind</option><option value="Manuális">Manuális</option><option value="Ütemezett">Ütemezett</option></select></th>
+                <th style="padding:4px;"><select id="syncColFilterStatus" class="sync-col-filter" data-col="status" onchange="filterAndSortSyncHistory()" style="font-size:11px; padding:3px 4px; margin:0; width:100%;"><option value="ALL">Mind</option><option value="SIKERES">SIKERES</option><option value="HIBA">HIBA</option><option value="FOLYAMATBAN">FOLYAMATBAN</option></select></th>
+                <th style="padding:4px;"><input type="text" class="sync-col-filter" data-col="details" placeholder="Keresés..." onkeyup="filterAndSortSyncHistory()" style="font-size:11px; padding:3px 5px; margin:0; width:100%;"></th>
+                <th style="text-align:right; padding:4px;"><button class="btn" onclick="clearSyncColFilters()" style="background:#e2e8f0; color:#475569; padding:2px 6px; font-size:11px;">✕ Törlés</button></th>
+            </tr>
+        </thead>
+        <tbody id="syncHistoryTableBody">
+            <tr><td colspan="8" style="text-align:center; padding:20px; color:#94a3b8;">Szinkronizálási naplók betöltése...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div id="syncPaginationBottom" class="card-box" style="background:#ffffff; padding:8px 16px; margin-top:8px; border-left:4px solid #0284c7;"></div>
+
+<div id="syncDetailModal" class="modal" style="display:none; pointer-events:none;">
+    <div class="modal-content" style="max-width:750px; border-radius:10px;">
+        <div class="modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:14px 20px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span id="mdl_sync_badge" style="background:#0284c7; color:white; padding:3px 10px; border-radius:6px; font-weight:bold; font-size:12.5px;">Forrás</span>
+                <h3 id="mdl_sync_title" style="margin:0; font-size:16.5px; color:#0f172a;">Szinkronizálási Folyamat Részletei</h3>
+            </div>
+            <button class="modal-close" onclick="closeSyncDetailModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:20px; max-height:calc(85vh - 70px); overflow-y:auto;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:15px; margin-bottom:15px; font-size:13px;">
+                <div><b>Indítás:</b> <span id="mdl_sync_started">-</span></div>
+                <div><b>Befejezés:</b> <span id="mdl_sync_ended">-</span></div>
+                <div><b>Futási Idő:</b> <span id="mdl_sync_duration">-</span></div>
+                <div><b>Kiváltó Ok:</b> <span id="mdl_sync_trigger">-</span></div>
+                <div><b>Státusz:</b> <span id="mdl_sync_status">-</span></div>
+                <div><b>Változások Száma:</b> <span id="mdl_sync_changes">-</span></div>
+            </div>
+            <div style="margin-bottom:15px;">
+                <b>Folyamat és Paraméter Napló:</b>
+                <div id="mdl_sync_details" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:12px; font-size:13px; line-height:1.5; color:#334155; margin-top:5px; max-height:160px; overflow-y:auto;">-</div>
+            </div>
+            <div>
+                <b>Részletes Paraméterek (JSON):</b>
+                <pre id="mdl_sync_json" style="background:#0f172a; color:#f8fafc; padding:12px; border-radius:6px; font-size:11px; max-height:180px; overflow-y:auto; margin-top:5px;"></pre>
+            </div>
+        </div>
+    </div>
+</div>

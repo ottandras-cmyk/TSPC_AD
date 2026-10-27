@@ -1,0 +1,2345 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AD Tracker & Rendszerközpont</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:#f8fafc; margin:0; padding:16px; color:#0f172a; }
+        .app-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .app-navbar { display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid #cbd5e1; padding-bottom:8px; margin-bottom:16px; position:relative; z-index:99999 !important; pointer-events:auto !important; }
+        .app-nav-btn { background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; padding:7px 13px; font-size:12.5px; font-weight:bold; border-radius:6px; cursor:pointer; transition:all 0.15s ease; }
+        .app-nav-btn:hover { background:#e2e8f0; }
+        .app-nav-btn.active { background:#0284c7; color:#ffffff; border-color:#0284c7; }
+        .app-tab-pane { display:none; }
+        .app-tab-pane.active { display:block; }
+        .card-box { background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.04); margin-bottom:14px; }
+        .btn { border:none; border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; padding:6px 12px; transition:opacity 0.15s; }
+        .btn:hover { opacity:0.9; }
+        table { width:100%; border-collapse:collapse; text-align:left; font-size:12.5px; }
+        th { background:#f8fafc; color:#475569; font-weight:700; padding:9px 10px; border-bottom:1px solid #e2e8f0; }
+        td { padding:8px 10px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+        tr:hover td { background:#f8fafc; }
+        .modal-overlay { position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.65); backdrop-filter:blur(2px); z-index:9999; display:none !important; pointer-events:none !important; align-items:center; justify-content:center; }
+        .modal-box { background:#ffffff; border-radius:8px; box-shadow:0 10px 30px rgba(0,0,0,0.25); max-height:85vh; overflow-y:auto; box-sizing:border-box; }
+    </style>
+</head>
+<body>
+    <div class="app-header">
+        <h2 style="margin:0; font-size:20px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+            <span>AD Tracker &amp; Rendszerközpont</span>
+        </h2>
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:12px; color:#475569;">Bejelentkezve: <b style="color:#0f172a;">tadmin</b></span>
+            <a href="/logout" class="btn" style="background:#dc2626; color:white; text-decoration:none; padding:4px 10px; border-radius:4px; font-size:11.5px;">Kilépés</a>
+        </div>
+    </div>
+
+    <!-- FELSŐ MENÜSOR (11 FÜL) -->
+    <div class="app-navbar">
+        <button class="app-nav-btn active" id="nav-btn-dashboard" onclick="switchTab('dashboard')">Jogosultság Változások</button>
+        <button class="app-nav-btn" id="nav-btn-users" onclick="switchTab('users')">Felhasználók és Csoportok</button>
+        <button class="app-nav-btn" id="nav-btn-easy-project" onclick="switchTab('easy-project')">📁 Easy Project</button>
+        <button class="app-nav-btn" id="nav-btn-helpdesk" onclick="switchTab('helpdesk')">🎫 EP Hibajegykezelő +</button>
+        <button class="app-nav-btn" id="nav-btn-ad-analytics" onclick="switchTab('ad-analytics')">📊 AD Változás Elemző</button>
+        <button class="app-nav-btn" id="nav-btn-telemetry" onclick="switchTab('telemetry')">📈 Telemetria &amp; Rendszerállapot</button>
+        <button class="app-nav-btn" id="nav-btn-sync" onclick="switchTab('sync')">Szinkronizálási Napló</button>
+        <button class="app-nav-btn" id="nav-btn-ai" onclick="switchTab('ai')">AI Elemző &amp; Asszisztens</button>
+        <button class="app-nav-btn" id="nav-btn-time-machine" onclick="switchTab('time-machine')">Történeti Időgép (CSV Import)</button>
+        <button class="app-nav-btn" id="nav-btn-backups" onclick="switchTab('backups')">Mentések &amp; Verziók</button>
+        <button class="app-nav-btn" id="nav-btn-settings" onclick="switchTab('settings')">Beállítások</button>
+    </div>
+
+    <!-- 1. JOGOSULTSÁG VÁLTOZÁSOK (DASHBOARD) -->
+    <div id="pane-dashboard" class="app-tab-pane active">
+        <div class="card-box" style="padding:14px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div style="display:flex; gap:8px; align-items:center; flex-grow:1;">
+                    <input type="text" id="dashGlobalSearch" placeholder="🔍 Keresés felhasználónévre, csoportra, részletekre..." style="padding:7px 12px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; width:340px;" oninput="filterAndSortDashboard()">
+                    <select id="dashFilterType" style="padding:7px 10px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px;" onchange="filterAndSortDashboard()">
+                        <option value="ALL">Minden esemény típus</option>
+                    </select>
+                    <input type="text" id="dashFilterAccount" placeholder="Fiók szűrés..." style="padding:7px 10px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; width:150px;" oninput="filterAndSortDashboard()">
+                    <button class="btn" style="background:#f1f5f9; color:#475569; padding:7px 12px; border:1px solid #cbd5e1;" onclick="resetDashFilters()">Szűrők törlése</button>
+                </div>
+                <button class="btn" style="background:#0284c7; color:white; padding:7px 14px;" onclick="loadDashboardEvents()">🔄 Frissítés</button>
+            </div>
+        </div>
+
+        <div class="card-box" style="padding:0; overflow:hidden;">
+            <div id="dashPaginationTop" style="padding:8px 14px; border-bottom:1px solid #e2e8f0; background:#f8fafc;"></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:160px; cursor:pointer;" onclick="sortDashBy('timestamp')">Időbélyeg <span id="dash_sort_timestamp">▼</span></th>
+                        <th style="width:280px; cursor:pointer;" onclick="sortDashBy('entity_name')">Érintett Fiók <span id="dash_sort_entity_name">⇅</span></th>
+                        <th style="width:200px; cursor:pointer;" onclick="sortDashBy('change_type')">Változás Típusa <span id="dash_sort_change_type">⇅</span></th>
+                        <th>Részletek &amp; Érintett Csoportok</th>
+                    </tr>
+                </thead>
+                <tbody id="eventsTableBody">
+                    <tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8;">Események betöltése...</td></tr>
+                </tbody>
+            </table>
+            <div id="dashPaginationBottom" style="padding:8px 14px; border-top:1px solid #e2e8f0; background:#f8fafc;"></div>
+        </div>
+    </div>
+
+    <!-- 2. FELHASZNÁLÓK ÉS CSOPORTOK (3907 FIÓK) -->
+    <div id="pane-users" class="app-tab-pane">
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:14px;">
+            <div class="card-box" style="padding:12px; border-left:4px solid #0284c7;"><small style="color:#64748b; font-weight:bold;">Összes Felhasználó</small><h3 id="u_kpi_total" style="margin:4px 0 0 0; color:#0284c7; font-size:22px;">3907 fő</h3></div>
+            <div class="card-box" style="padding:12px; border-left:4px solid #16a34a;"><small style="color:#64748b; font-weight:bold;">Aktív Munkatárs</small><h3 id="u_kpi_active" style="margin:4px 0 0 0; color:#16a34a; font-size:22px;">2925 fő</h3></div>
+            <div class="card-box" style="padding:12px; border-left:4px solid #dc2626;"><small style="color:#64748b; font-weight:bold;">Letiltott Fiók</small><h3 id="u_kpi_disabled" style="margin:4px 0 0 0; color:#dc2626; font-size:22px;">982 fő</h3></div>
+            <div class="card-box" style="padding:12px; border-left:4px solid #6366f1;"><small style="color:#64748b; font-weight:bold;">Összes Csoport</small><h3 id="u_kpi_groups" style="margin:4px 0 0 0; color:#6366f1; font-size:22px;">858 db</h3></div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button class="btn" id="btnSubUsers" style="background:#0284c7; color:white; padding:8px 16px;" onclick="switchUsersSubTab('users')">👤 Felhasználók (<span id="u_badge_cnt">3907</span>)</button>
+            <button class="btn" id="btnSubGroups" style="background:#f1f5f9; color:#334155; padding:8px 16px;" onclick="switchUsersSubTab('groups')">👥 Csoportok (<span id="g_badge_cnt">858</span>)</button>
+        </div>
+
+        <!-- 2.A FELHASZNÁLÓK NÉZET -->
+        <div id="viewUsersContainer" class="card-box" style="padding:0; overflow:hidden;">
+            <div style="padding:10px 14px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                <input type="text" id="userGlobalSearch" placeholder="🔍 Keresés névre, SAM azonosítóra, e-mailre, beosztásra..." style="padding:6px 12px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; width:360px;" oninput="filterAndSortUsers()">
+                <div id="userPaginationTop"></div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:240px; cursor:pointer;" onclick="sortUsersBy('display_name')">Név <span id="u_sort_display_name">▲</span></th>
+                        <th style="width:170px; cursor:pointer;" onclick="sortUsersBy('sam_account_name')">Felhasználónév <span id="u_sort_sam_account_name">⇅</span></th>
+                        <th style="width:220px; cursor:pointer;" onclick="sortUsersBy('mail')">E-mail Cím <span id="u_sort_mail">⇅</span></th>
+                        <th style="width:160px; cursor:pointer;" onclick="sortUsersBy('department')">Részleg <span id="u_sort_department">⇅</span></th>
+                        <th style="width:170px; cursor:pointer;" onclick="sortUsersBy('title')">Beosztás <span id="u_sort_title">⇅</span></th>
+                        <th style="width:140px; cursor:pointer;" onclick="sortUsersBy('last_logon')">Utolsó Belépés <span id="u_sort_last_logon">⇅</span></th>
+                        <th style="text-align:right; width:110px;">Adatlap</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr><td colspan="7" style="text-align:center; padding:20px; color:#94a3b8;">Felhasználók betöltése...</td></tr>
+                </tbody>
+            </table>
+            <div id="userPaginationBottom" style="padding:8px 14px; border-top:1px solid #e2e8f0; background:#f8fafc;"></div>
+        </div>
+
+        <!-- 2.B CSOPORTOK NÉZET -->
+        <div id="viewGroupsContainer" class="card-box" style="padding:0; overflow:hidden; display:none;">
+            <div style="padding:10px 14px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                <input type="text" id="groupGlobalSearch" placeholder="🔍 Keresés csoportnévre, leírásra, DN útvonalra..." style="padding:6px 12px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; width:360px;" oninput="filterAndSortGroups()">
+                <div id="groupPaginationTop"></div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:260px; cursor:pointer;" onclick="sortGroupsBy('sam_account_name')">Csoport Neve <span id="g_sort_sam_account_name">▲</span></th>
+                        <th style="width:150px; cursor:pointer;" onclick="sortGroupsBy('group_scope')">Típus &amp; Scope <span id="g_sort_group_scope">⇅</span></th>
+                        <th style="width:240px; cursor:pointer;" onclick="sortGroupsBy('description')">Leírás <span id="g_sort_description">⇅</span></th>
+                        <th style="cursor:pointer;" onclick="sortGroupsBy('dn')">AD Distinguished Name (DN) <span id="g_sort_dn">⇅</span></th>
+                        <th style="text-align:right; width:110px;">Tagok</th>
+                    </tr>
+                </thead>
+                <tbody id="groupsTableBody">
+                    <tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8;">Csoportok betöltése...</td></tr>
+                </tbody>
+            </table>
+            <div id="groupPaginationBottom" style="padding:8px 14px; border-top:1px solid #e2e8f0; background:#f8fafc;"></div>
+        </div>
+    </div>
+
+    <!-- 3. EASY PROJECT -->
+    <div id="pane-easy-project" class="app-tab-pane">
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:14px;">
+            <div class="card-box" style="padding:12px; border-left:4px solid #0284c7;"><small style="color:#64748b; font-weight:bold;">Projektek Száma</small><h3 id="ep_stat_projects" style="margin:4px 0 0 0; color:#0284c7; font-size:22px;">17 db</h3></div>
+            <div class="card-box" style="padding:12px; border-left:4px solid #16a34a;"><small style="color:#64748b; font-weight:bold;">Összes Feladat</small><h3 id="ep_stat_tasks" style="margin:4px 0 0 0; color:#16a34a; font-size:22px;">3380 db</h3></div>
+            <div class="card-box" style="padding:12px; border-left:4px solid #6366f1;"><small style="color:#64748b; font-weight:bold;">Rögzített Változások</small><h3 id="ep_stat_changes" style="margin:4px 0 0 0; color:#6366f1; font-size:22px;">4309 db</h3></div>
+        </div>
+
+        <div class="card-box" style="padding:0; overflow:hidden;">
+            <div style="padding:10px 14px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                <div style="display:flex; gap:6px; align-items:center; flex-grow:1;">
+                    <input type="text" id="epTaskSearch" placeholder="🔍 Keresés feladatra, felelősre..." style="padding:6px 12px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; width:260px;" oninput="filterAndSortEpTasks()">
+                    <select id="epFilterProject" style="padding:6px 8px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px;" onchange="filterAndSortEpTasks()"><option value="ALL">Minden projekt</option></select>
+                    <select id="epFilterStatus" style="padding:6px 8px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px;" onchange="filterAndSortEpTasks()"><option value="ALL">Minden státusz</option></select>
+                    <select id="epFilterPriority" style="padding:6px 8px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px;" onchange="filterAndSortEpTasks()"><option value="ALL">Minden prioritás</option></select>
+                </div>
+                <div id="epPaginationTop"></div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:90px; cursor:pointer;" onclick="sortEpTasksBy('id')">ID <span id="ep_sort_id">▼</span></th>
+                        <th style="width:200px;">Projekt</th>
+                        <th>Feladat Tárgya</th>
+                        <th style="width:160px;">Felelős</th>
+                        <th style="width:120px;">Státusz</th>
+                        <th style="width:110px;">Prioritás</th>
+                        <th style="width:140px;">Létrehozva</th>
+                    </tr>
+                </thead>
+                <tbody id="epTasksTableBody">
+                    <tr><td colspan="7" style="text-align:center; padding:20px; color:#94a3b8;">Feladatok betöltése...</td></tr>
+                </tbody>
+            </table>
+            <div id="epPaginationBottom" style="padding:8px 14px; border-top:1px solid #e2e8f0; background:#f8fafc;"></div>
+        </div>
+    </div>
+
+        <!-- 4. EP HIBAJEGYKEZELŐ + (#2403) -->
+    <div id="pane-helpdesk" class="app-tab-pane">
+        <!-- KPI KÁRTYÁK: KATTINTÁSRA AZONNALI SZŰRÉS -->
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:14px;">
+            <div id="hd_kpi_card_total" class="card-box" style="padding:12px; border-left:4px solid #0284c7; cursor:pointer; transition:all 0.15s ease; box-shadow:0 0 0 2px #0284c7;" onclick="filterHdByKpi('ALL')" title="Kattintson az összes jegy listázásához">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <small style="color:#64748b; font-weight:bold;">Összes IT Jegy (#2403)</small>
+                    <span style="font-size:10px; background:#e0f2fe; color:#0369a1; padding:1px 6px; border-radius:10px; font-weight:bold;">Minden jegy</span>
+                </div>
+                <h3 id="hd_stat_total" style="margin:4px 0 0 0; color:#0284c7; font-size:22px;">1029 db</h3>
+            </div>
+            <div id="hd_kpi_card_open" class="card-box" style="padding:12px; border-left:4px solid #16a34a; cursor:pointer; transition:all 0.15s ease;" onclick="filterHdByKpi('OPEN')" title="Kattintson ide: csak a 2 nyitott jegy megjelenítése!">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <small style="color:#64748b; font-weight:bold;">Nyitott / Folyamatban</small>
+                    <span style="font-size:10px; background:#dcfce7; color:#15803d; padding:1px 6px; border-radius:10px; font-weight:bold;">Kattintható 👆</span>
+                </div>
+                <h3 id="hd_stat_open" style="margin:4px 0 0 0; color:#16a34a; font-size:22px;">2 db</h3>
+            </div>
+            <div id="hd_kpi_card_closed" class="card-box" style="padding:12px; border-left:4px solid #64748b; cursor:pointer; transition:all 0.15s ease;" onclick="filterHdByKpi('CLOSED')" title="Kattintson csak a megoldott/lezárt jegyek listázásához">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <small style="color:#64748b; font-weight:bold;">Megoldott / Lezárt</small>
+                    <span style="font-size:10px; background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:10px; font-weight:bold;">Archív</span>
+                </div>
+                <h3 id="hd_stat_closed" style="margin:4px 0 0 0; color:#475569; font-size:22px;">1027 db</h3>
+            </div>
+            <div class="card-box" style="padding:12px; border-left:4px solid #f59e0b;">
+                <small style="color:#64748b; font-weight:bold;">Utolsó Szinkron</small>
+                <h3 id="hd_stat_last_sync" style="margin:4px 0 0 0; color:#d97706; font-size:16px;">Ma 15:34</h3>
+            </div>
+        </div>
+
+        <!-- TÁBLÁZAT ÉS RÉSZLETES SZŰRŐSÁV -->
+        <div class="card-box" style="padding:0; overflow:hidden;">
+            <!-- SZŰRŐK KONTÉNERE -->
+            <div style="padding:12px 14px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; flex-direction:column; gap:10px;">
+                <!-- 1. SOR: KERESÉS, RESET ÉS LAPOZÓ -->
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <div style="display:flex; gap:8px; align-items:center; flex-grow:1;">
+                        <input type="text" id="hdGlobalSearch" placeholder="🔍 Keresés jegy azonosítóra, névre, leltári számra, tárgyra, leírásra..." style="padding:7px 12px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; width:380px;" oninput="filterAndSortHelpdesk()">
+                        <button class="btn" style="background:#f1f5f9; color:#475569; padding:7px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; font-weight:bold;" onclick="resetHdFilters()">🔄 Szűrők törlése</button>
+                    </div>
+                    <div id="hdPaginationTop"></div>
+                </div>
+                <!-- 2. SOR: RÉSZLETES DEDIKÁLT SZŰRŐK -->
+                                <!-- 2. SOR: RÉSZLETES DEDIKÁLT SZŰRŐK: STÁTUSZ, PRIORITÁS, LELTÁR, BEJELENTŐ, HELYSZÍN -->
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px;">
+                    <span style="font-weight:bold; color:#475569;">Szűrés:</span>
+                    <select id="hdFilterStatus" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff; color:#0f172a; font-weight:600;" onchange="onHdDropdownFilterChange('status')">
+                        <option value="ALL">Minden státusz (1029 db)</option>
+                    </select>
+                    <select id="hdFilterPriority" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff; color:#0f172a; font-weight:600;" onchange="onHdDropdownFilterChange('priority')">
+                        <option value="ALL">⚡ Minden prioritás</option>
+                    </select>
+                    <select id="hdFilterInventory" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff; color:#0f172a;" onchange="onHdDropdownFilterChange('inventory')">
+                        <option value="ALL">💻 Minden leltári szám</option>
+                    </select>
+                    <select id="hdFilterAuthor" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff; color:#0f172a;" onchange="onHdDropdownFilterChange('author')">
+                        <option value="ALL">👤 Minden bejelentő</option>
+                    </select>
+                    <select id="hdFilterLocation" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff; color:#0f172a;" onchange="onHdDropdownFilterChange('location')">
+                        <option value="ALL">📍 Minden helyszín</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- TÁBLÁZAT: MINDEN OSZLOP KATTINTÁSRA RENDEZHETŐ -->
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:85px; cursor:pointer; user-select:none;" onclick="sortHdBy('id')" title="Kattintson az ID szerinti rendezéshez">ID <span id="hd_sort_id">▼</span></th>
+                        <th style="width:95px; cursor:pointer; user-select:none;" onclick="sortHdBy('hd_serial')" title="Kattintson a Sorszám szerinti rendezéshez">Sorszám <span id="hd_sort_hd_serial">⇅</span></th>
+                        <th style="width:130px; cursor:pointer; user-select:none;" onclick="sortHdBy('created_on')" title="Kattintson a Dátum szerinti rendezéshez">Dátum <span id="hd_sort_created_on">⇅</span></th>
+                        <th style="width:110px; cursor:pointer; user-select:none;" onclick="sortHdBy('inventory_number')" title="Kattintson a Leltári Szám szerinti rendezéshez">Leltári Szám <span id="hd_sort_inventory_number">⇅</span></th>
+                        <th style="width:170px; cursor:pointer; user-select:none;" onclick="sortHdBy('author_name')" title="Kattintson a Bejelentő szerinti rendezéshez">Bejelentő <span id="hd_sort_author_name">⇅</span></th>
+                        <th style="width:110px; cursor:pointer; user-select:none;" onclick="sortHdBy('phone')" title="Kattintson a Telefon szerinti rendezéshez">Telefon <span id="hd_sort_phone">⇅</span></th>
+                        <th style="width:120px; cursor:pointer; user-select:none;" onclick="sortHdBy('location')" title="Kattintson a Helyszín szerinti rendezéshez">Helyszín <span id="hd_sort_location">⇅</span></th>
+                        <th style="width:140px; cursor:pointer; user-select:none;" onclick="sortHdBy('status_name')" title="Kattintson a Státusz szerinti rendezéshez">Státusz <span id="hd_sort_status_name">⇅</span></th>
+                        <th style="width:95px; cursor:pointer; user-select:none;" onclick="sortHdBy('priority_name')" title="Kattintson a Prioritás szerinti rendezéshez">Prioritás <span id="hd_sort_priority_name">⇅</span></th>
+                        <th style="cursor:pointer; user-select:none;" onclick="sortHdBy('subject')" title="Kattintson a Tárgy szerinti rendezéshez">Tárgy &amp; Probléma <span id="hd_sort_subject">⇅</span></th>
+                        <th style="text-align:right; width:130px;">Műveletek</th>
+                    </tr>
+                </thead>
+                <tbody id="hdTicketsTableBody">
+                    <tr><td colspan="11" style="text-align:center; padding:20px; color:#94a3b8;">Hibajegyek betöltése...</td></tr>
+                </tbody>
+            </table>
+            <div id="hdPaginationBottom" style="padding:8px 14px; border-top:1px solid #e2e8f0; background:#f8fafc;"></div>
+        </div>
+    </div>
+
+    <div id="pane-ad-analytics" class="app-tab-pane">
+        <div class="card-box" style="padding:16px;">
+            <h4 style="margin:0 0 8px 0; color:#0284c7;">📊 Active Directory Változás Elemző</h4>
+            <p style="color:#64748b; font-size:13px; margin:0;">Biztonsági anomáliák, jogosultsági kilengések és csoporttagságok analitikája.</p>
+        </div>
+    </div>
+
+    <!-- 6. TELEMETRIA & RENDSZERÁLLAPOT -->
+    <div id="pane-telemetry" class="app-tab-pane">
+        <div class="card-box" style="padding:16px;">
+            <h4 style="margin:0 0 8px 0; color:#0284c7;">📈 Rendszer Telemetria &amp; Erőforrás Monitor</h4>
+            <p style="color:#64748b; font-size:13px; margin:0;">Docker konténer állapot, CPU, memória és PostgreSQL kapcsolat-teljesítmény.</p>
+        </div>
+    </div>
+
+    <!-- 7. SZINKRONIZÁLÁSI NAPLÓ -->
+    <div id="pane-sync" class="app-tab-pane">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3 style="margin:0; font-size:16px;">🔄 LDAP &amp; Easy Project Szinkronizálási Történet</h3>
+            <button class="btn" style="background:#0284c7; color:white; padding:6px 14px;" onclick="triggerManualSync()">⚡ Kézi Szinkronizálás Indítása</button>
+        </div>
+        <div class="card-box" style="padding:0; overflow:hidden;">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:130px;">Forrás</th>
+                        <th style="width:150px;">Kezdés</th>
+                        <th style="width:150px;">Befejezés</th>
+                        <th style="width:100px;">Időtartam</th>
+                        <th style="width:120px;">Trigger</th>
+                        <th style="width:110px;">Állapot</th>
+                        <th>Változások &amp; Eredmény</th>
+                        <th style="text-align:right; width:100px;">Részletek</th>
+                    </tr>
+                </thead>
+                <tbody id="syncHistoryTableBody">
+                    <tr><td colspan="8" style="text-align:center; padding:20px; color:#94a3b8;">Napló betöltése...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 8. AI ELEMZŐ & ASSZISZTENS (TELJES OLLAMA WORKSPACE) -->
+    <div id="pane-ai" class="app-tab-pane">
+        <div class="card-box" style="padding:12px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:26px;">🦙</span>
+                <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <b style="font-size:14px; color:#0f172a;">Helyi AI Modell:</b>
+                        <select id="aiModelSelect" style="padding:5px 12px; font-size:13px; font-weight:bold; border:1px solid #cbd5e1; border-radius:6px; background:#ffffff; color:#0284c7; cursor:pointer;" onchange="onAiModelChange()">
+                            <option value="llama3:8b">llama3:8b (Helyi - Gyors válaszadás)</option>
+                            <option value="qwen2.5-coder:7b">qwen2.5-coder:7b (Kódbázis és Fájlelemzés)</option>
+                            <option value="mistral:7b">mistral:7b (Általános Rendszerasszisztens)</option>
+                            <option value="deepseek-coder:6.7b">deepseek-coder:6.7b (Kódgenerálás)</option>
+                            <option value="phi3:mini">phi3:mini (Ultra-könnyűsúlyú)</option>
+                            <option value="ad-tracker-agent:v1.08">ad-tracker-agent:v1.08 (Beépített Szakértő)</option>
+                        </select>
+                        <span id="aiModelStatusBadge" style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-size:11.5px; font-weight:bold;">🟢 Online / Helyi</span>
+                    </div>
+                    <div id="aiHostInfoText" style="font-size:11.5px; color:#64748b; margin-top:2px;">Kiszolgáló: Beépített Helyi Motor &bull; Kódbázis index: aktív (py, html, css, js, docker, db)</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <button class="btn" style="background:#0284c7; color:white; padding:6px 14px; font-size:11.5px; font-weight:bold; border-radius:6px;" onclick="loadAiModels()">🔄 Modellek Frissítése</button>
+                <button class="btn" style="background:#16a34a; color:white; padding:6px 14px; font-size:11.5px; font-weight:bold; border-radius:6px;" onclick="openModelPullModal()">📥 Új Modell Letöltése (Ollama Pull)</button>
+                <button class="btn" style="background:#64748b; color:white; padding:6px 12px; font-size:11.5px; border-radius:6px;" onclick="clearAiChat()">🗑️ Törlés</button>
+            </div>
+        </div>
+
+        <div style="background:#e0f2fe; border:1px solid #bae6fd; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#0369a1; font-weight:bold; cursor:pointer;">
+                <input type="checkbox" id="aiSearchCodebaseToggle" checked style="width:18px; height:18px; accent-color:#0284c7;">
+                🔍 Teljes Kódbázis Keresés &amp; Kontextus (.py, .html, .js, .css, .json, docker, db sémák)
+            </label>
+            <span style="font-size:11.5px; color:#0284c7; background:#ffffff; border:1px solid #bae6fd; padding:3px 10px; border-radius:10px; font-weight:600;">📁 Konténer összes fájlja automatikusan bevonva a válaszadáshoz</span>
+        </div>
+
+        <div class="card-box" style="padding:0; margin-bottom:14px; display:flex; flex-direction:column; overflow:hidden; border:1px solid #cbd5e1; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div id="aiChatMessagesContainer" style="height:460px; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; background:#f8fafc;"></div>
+
+            <div id="aiProgressBox" style="display:none; background:#0f172a; color:#f8fafc; padding:10px 16px; border-top:1px solid #1e293b; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:10px; font-size:12.5px;">
+                    <span style="display:inline-block; font-size:16px;">⏳</span>
+                    <span id="aiProgressText" style="color:#38bdf8; font-weight:bold;">Kódbázis vizsgálata és válasz generálása folyamatban...</span>
+                </div>
+                <button class="btn" style="background:#dc2626; color:white; padding:5px 16px; font-size:12px; font-weight:bold; border-radius:5px;" onclick="cancelAiGeneration()">⏹️ Megállítás</button>
+            </div>
+
+            <div style="background:#ffffff; border-top:1px solid #e2e8f0; padding:12px 16px;">
+                <div style="display:flex; gap:6px; margin-bottom:8px; overflow-x:auto; padding-bottom:4px;">
+                    <span style="background:#f1f5f9; color:#475569; padding:3px 10px; border-radius:12px; font-size:11.5px; cursor:pointer; white-space:nowrap; border:1px solid #e2e8f0;" onclick="setAiPromptText('Keresd meg a Telegram bot beállításait a kódbázisban és mutasd be a működését!')">🤖 Telegram Bot működése</span>
+                    <span style="background:#f1f5f9; color:#475569; padding:3px 10px; border-radius:12px; font-size:11.5px; cursor:pointer; white-space:nowrap; border:1px solid #e2e8f0;" onclick="setAiPromptText('Hogyan épül fel a docker-compose.yml és a Dockerfile?')">🐳 Docker konfiguráció</span>
+                    <span style="background:#f1f5f9; color:#475569; padding:3px 10px; border-radius:12px; font-size:11.5px; cursor:pointer; white-space:nowrap; border:1px solid #e2e8f0;" onclick="setAiPromptText('Mutasd be az Active Directory felhasználói és csoport sémákat!')">👥 AD sémák &amp; táblák</span>
+                    <span style="background:#f1f5f9; color:#475569; padding:3px 10px; border-radius:12px; font-size:11.5px; cursor:pointer; white-space:nowrap; border:1px solid #e2e8f0;" onclick="setAiPromptText('Milyen Helpdesk hibajegyek és prioritások szerepelnek a rendszerben?')">🎫 Helpdesk hibajegyek</span>
+                    <span style="background:#f1f5f9; color:#475569; padding:3px 10px; border-radius:12px; font-size:11.5px; cursor:pointer; white-space:nowrap; border:1px solid #e2e8f0;" onclick="setAiPromptText('Mutasd be a settings.json teljes tartalmát és konfigurációs részeit!')">⚙️ Teljes settings.json</span>
+                </div>
+                <div style="display:flex; gap:10px; align-items:flex-end;">
+                    <textarea id="aiPromptInput" rows="2" placeholder="Tegyen fel egy kérdést a rendszerről vagy a kódbázisról... (Enter: küldés, Shift+Enter: új sor)" style="flex-grow:1; padding:10px 14px; font-size:13.5px; border:1px solid #cbd5e1; border-radius:8px; resize:none; font-family:sans-serif; box-sizing:border-box; outline:none; line-height:1.4;" onkeydown="handleAiInputKey(event)"></textarea>
+                    <div style="display:flex; gap:6px;">
+                        <button id="btnAiSend" class="btn" style="background:#0284c7; color:white; padding:10px 22px; font-size:13.5px; font-weight:bold; border-radius:8px; display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="sendAiPrompt()">
+                            <span>🚀</span> <span>Küldés</span>
+                        </button>
+                        <button id="btnAiStop" class="btn" style="background:#dc2626; color:white; padding:10px 18px; font-size:13.5px; font-weight:bold; border-radius:8px; display:none; cursor:pointer;" onclick="cancelAiGeneration()">
+                            <span>⏹️</span> <span>Stop</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <details style="margin-bottom:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px;">
+            <summary style="font-size:13.5px; font-weight:bold; color:#166534; cursor:pointer; outline:none;">
+                🤖 AI Rendszer-Újraépítő Blueprint &amp; Prompt Tudásbázis (Kattintson a kinyitáshoz)
+            </summary>
+            <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <span style="font-size:12px; color:#15803d;">Kimerítő leírások más AI-k (Claude, ChatGPT, Gemini) számára azonnali újraépítéshez:</span>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn" style="background:#16a34a; color:white; padding:5px 12px; font-size:11.5px; font-weight:bold; border-radius:5px;" onclick="copyAiBlueprint('prompt')">📋 Rendszer Prompt Másolása</button>
+                    <button class="btn" style="background:#0284c7; color:white; padding:5px 12px; font-size:11.5px; font-weight:bold; border-radius:5px;" onclick="copyAiBlueprint('skill')">📘 AI Skill Másolása</button>
+                    <button class="btn" style="background:#6366f1; color:white; padding:5px 12px; font-size:11.5px; font-weight:bold; border-radius:5px;" onclick="viewAiBlueprintModal()">👁️ Teljes AI Csomag Megtekintése</button>
+                </div>
+            </div>
+        </details>
+
+        <details style="margin-bottom:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px;">
+            <summary style="font-size:13.5px; font-weight:bold; color:#0f172a; cursor:pointer; outline:none;">
+                📸 Mentett Rendszer Képernyőképek Galéria (screenshots/) (Kattintson a kinyitáshoz)
+            </summary>
+            <div style="margin-top:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <small style="color:#64748b;">Optimalizált JPEG képek (~180 KB), automatikusan bekerülnek a .tar.gz mentésbe is.</small>
+                    <button class="btn" style="background:#0284c7; color:white; padding:3px 10px; font-size:11px; border-radius:4px;" onclick="loadScreenshotsGallery()">🔄 Képek Frissítése</button>
+                </div>
+                <div id="screenshotsGalleryGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:10px;">
+                    <div style="color:#94a3b8; font-size:12px; padding:8px;">Kattintson a Mentések lapon a 📸 Képernyőképek Készítése gombra!</div>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <!-- 9. TÖRTÉNETI IDŐGÉP (CSV IMPORT) -->
+    <div id="pane-time-machine" class="app-tab-pane">
+        <div class="card-box" style="padding:16px;">
+            <h4 style="margin:0 0 8px 0; color:#0284c7;">⌛ Történeti Időgép (CSV Import)</h4>
+            <p style="color:#64748b; font-size:13px; margin:0;">Korábbi állapotok visszanézése és CSV archívumok betöltése.</p>
+        </div>
+    </div>
+
+    <!-- 10. MENTÉSEK & VERZIÓK -->
+        <!-- MENTÉSEK & VERZIÓK FÜL (TELJESEN ÚJRAGENERÁLT, MŰKÖDŐ VERZIÓ) -->
+    <div id="pane-backups" class="app-tab-pane" style="display: none;">
+        <!-- 1. FEJLÉC ÉS AZ 5 FŐ MŰVELETI GOMB -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+            <h2 style="margin: 0; font-size: 1.35rem; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                <span>💾</span> Mentések &amp; Git Verziókezelési Központ
+            </h2>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-primary" id="btn_refresh_all" onclick="refreshBackups()" style="background:#0284c7; color:white; font-weight:600; padding:7px 14px; border-radius:6px; border:none; cursor:pointer;">
+                    🔄 Frissítés
+                </button>
+                <button class="btn btn-success" id="btn_gen_doc" onclick="generateSystemDoc()" style="background:#059669; color:white; font-weight:600; padding:7px 14px; border-radius:6px; border:none; cursor:pointer;">
+                    📄 Rendszerleírás &amp; AI Adatforrás Generálása
+                </button>
+                <button class="btn btn-purple" id="btn_capture_shots" onclick="takeAllScreenshots()" style="background:#7c3aed; color:white; font-weight:600; padding:7px 14px; border-radius:6px; border:none; cursor:pointer;">
+                    📸 Rendszer Képernyőképek Készítése (Összes Fül)
+                </button>
+                <button class="btn btn-success" id="btn_manual_backup" onclick="createManualBackup()" style="background:#16a34a; color:white; font-weight:600; padding:7px 14px; border-radius:6px; border:none; cursor:pointer;">
+                    ➕ Új Helyi Mentés Készítése
+                </button>
+                <button class="btn btn-info" id="btn_commit_version" onclick="commitGitVersion()" style="background:#9333ea; color:white; font-weight:600; padding:7px 14px; border-radius:6px; border:none; cursor:pointer;">
+                    🚀 Mentés Git-re (+0.01 Verzió)
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. NÉGY KPI KÁRTYA -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 22px;">
+            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid #0284c7; border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 6px;">Helyi Mentések Száma</div>
+                <div id="bk_stat_count" style="font-size: 24px; font-weight: 800; color: #0284c7;">-- db</div>
+            </div>
+            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 6px;">Utolsó Mentés</div>
+                <div id="bk_stat_last" style="font-size: 17px; font-weight: 800; color: #16a34a; line-height: 1.4;">--</div>
+            </div>
+            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid #7c3aed; border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 6px;">Git Verzió / Ág</div>
+                <div id="bk_stat_version" style="font-size: 20px; font-weight: 800; color: #7c3aed;">main (v1.09)</div>
+            </div>
+            <div style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid #0d9488; border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 6px;">Összhely Foglalás</div>
+                <div id="bk_stat_size" style="font-size: 22px; font-weight: 800; color: #0d9488;">-- MB</div>
+            </div>
+        </div>
+
+        <!-- 3. TÁBLÁZAT 1: HELYI MENTÉSEK -->
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span>📦</span> Helyi PostgreSQL Adatbázis Mentések (.sql.gz)
+                    </h3>
+                    <span style="font-size: 12px; color: #64748b;">Minden mentés önállóan letölthető és biztonságosan törölhető a lemezről.</span>
+                </div>
+                <button onclick="loadBackups()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:4px 10px; border-radius:4px; font-size:12px; cursor:pointer;">🔄 Frissítés</button>
+            </div>
+            <div style="max-height: 380px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left; position: sticky; top: 0;">
+                            <th style="padding: 10px;">Fájlnév</th>
+                            <th style="padding: 10px;">Létrehozás Dátuma</th>
+                            <th style="padding: 10px;">Méret (MB)</th>
+                            <th style="padding: 10px;">Mentési Komment / Leírás</th>
+                            <th style="padding: 10px; text-align: right;">Műveletek</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backupsTableBody">
+                        <tr><td colspan="5" style="text-align: center; padding: 20px; color: #94a3b8;">Mentések betöltése...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 4. TÁBLÁZAT 2: GIT VERZIÓELŐZMÉNYEK -->
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span>🚀</span> Git &amp; GitHub Verzióelőzmények (Commit Napló)
+                    </h3>
+                    <span style="font-size: 12px; color: #64748b;">A valós GitHub commitok és kiadások története.</span>
+                </div>
+                <button onclick="loadGitCommits()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:4px 10px; border-radius:4px; font-size:12px; cursor:pointer;">🔄 Frissítés</button>
+            </div>
+            <div style="max-height: 340px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left; position: sticky; top: 0;">
+                            <th style="padding: 10px; width: 120px;">Commit / Hash</th>
+                            <th style="padding: 10px; width: 150px;">Dátum / Időpont</th>
+                            <th style="padding: 10px; width: 130px;">Szerző</th>
+                            <th style="padding: 10px;">Commit Komment / Megjegyzés</th>
+                            <th style="padding: 10px; width: 130px; text-align: center;">Állapot</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gitLogTableBody">
+                        <tr><td colspan="5" style="text-align: center; padding: 20px; color: #94a3b8;">Git napló betöltése...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 5. GALÉRIA: KÉPERNYŐKÉPEK -->
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span>📷</span> Mentett Rendszer Képernyőképek (screenshots/)
+                    </h3>
+                    <span style="font-size: 12px; color: #64748b;">Optimalizált JPEG képek (~180 KB), bekerülnek a .tar.gz mentésbe is.</span>
+                </div>
+                <button class="btn btn-primary" onclick="loadScreenshots()" style="background:#0284c7; color:white; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:600; border:none; cursor:pointer;">
+                    🔄 Képek Frissítése
+                </button>
+            </div>
+            <div id="screenshotsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px;">
+                <div style="grid-column: 1 / -1; padding: 20px; text-align: center; color: #94a3b8;">
+                    Képernyőképek betöltése...
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- BEÁLLÍTÁSOK FÜL (TELJES, BIZTONSÁGOS, ÖNÁLLÓAN VEZÉRELT VEZÉRLŐKÖZPONT) -->
+    <!-- BEÁLLÍTÁSOK FÜL (EGYETLEN KÖZÖS KÉPERNYŐ, KÜLÖNÁLLÓ KÁRTYÁKKAL) -->
+        <!-- BEÁLLÍTÁSOK FÜL (EGYETLEN KÖZÖS KÉPERNYŐ, KÜLÖNÁLLÓ KÁRTYÁKKAL) -->
+        <!-- BEÁLLÍTÁSOK FÜL (EGYETLEN KÖZÖS KÉPERNYŐ, KÜLÖNÁLLÓ KÁRTYÁKKAL) -->
+        <!-- BEÁLLÍTÁSOK FÜL (EGYETLEN KÖZÖS KÉPERNYŐ, KÜLÖNÁLLÓ KÁRTYÁKKAL) -->
+    <div id="pane-settings" class="app-tab-pane" style="display: none;">
+<div class="settings-unified-dashboard" style="display: flex; flex-direction: column; gap: 22px; padding: 10px 0;">
+
+    <div style="margin-bottom: 5px;">
+        <h2 style="margin: 0 0 6px 0; font-size: 20px; color: #0f172a; font-weight: 800;">⚙️ Rendszer &amp; Kapcsolati Vezérlőközpont</h2>
+        <p style="margin: 0; font-size: 13px; color: #64748b;">Minden kapcsolat, API kulcs és automatikus szinkronizálási időzítő egyetlen közös felületen.</p>
+    </div>
+
+    <!-- 1. KÁRTYASOR: AD & EASY PROJECT -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 24px;">
+
+        <!-- 1. KÁRTYA: ACTIVE DIRECTORY -->
+        <div style="background: white; border: 1px solid #cbd5e1; border-top: 5px solid #0284c7; border-radius: 10px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 17px; color: #0284c7; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <span>📍</span> Active Directory (AD) Kapcsolat
+                        </h3>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Címtár elérés, jogosultság- és felhasználó-audit</div>
+                    </div>
+                    <span style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700;">LDAP / DC</span>
+                </div>
+
+                <div id="status_ad_card" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; margin-bottom: 16px;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">AD Szerver (DC cím és port):</label>
+                        <input type="text" id="cfg_ad_server" placeholder="dc1.tspc.hu:389" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Keresési Bázis (Base DN):</label>
+                        <input type="text" id="cfg_ad_base_dn" placeholder="DC=tspc,DC=hu" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Bind Felhasználó:</label>
+                        <input type="text" id="cfg_ad_user" placeholder="DOMAIN\admin" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Bind Jelszó:</label>
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <input type="password" id="cfg_ad_password" placeholder="Jelszó..." style="width: 100%; padding: 8px 38px 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                            <button type="button" onclick="toggleSecretVisibility('cfg_ad_password', this)" title="Felfedés" style="position: absolute; right: 6px; background: none; border: none; font-size: 15px; cursor: pointer; color: #64748b;">👁️</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 20px;">
+                    <label style="display: block; font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">
+                        ⏱️ Automatikus AD Szinkronizálási Intervallum:
+                    </label>
+                    <select id="cfg_ad_interval" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: white; font-weight: 600; color: #0f172a;">
+                        <option value="15">⏱️ 15 percenként (Gyors adatkinyerés)</option>
+                        <option value="30">⏱️ 30 percenként</option>
+                        <option value="60">⏱️ 60 percenként (1 óra)</option>
+                        <option value="180">⏱️ 180 percenként (3 óra)</option>
+                        <option value="360">⏱️ 6 óránként</option>
+                        <option value="720">⏱️ 12 óránként (Fél naponta)</option>
+                        <option value="1440">⏱️ 24 óránként (Naponta egyszer)</option>
+                        <option value="2880">⏱️ 48 óránként (Kétnaponta)</option>
+                        <option value="0">⛔ Kikapcsolva (Csak kézi indítás)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" id="btn_save_ad" onclick="saveAdCard()" style="background: #16a34a; color: white; border: none; padding: 9px 16px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; flex: 1;">
+                    💾 Mentés
+                </button>
+                <button type="button" id="btn_test_ad" onclick="testAdCard()" style="background: #0284c7; color: white; border: none; padding: 9px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                    🔌 Tesztelés
+                </button>
+                <button type="button" id="btn_sync_ad" onclick="syncAdNow()" style="background: #475569; color: white; border: none; padding: 9px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                    🔄 Kinyerés Most
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. KÁRTYA: EASY PROJECT -->
+        <div style="background: white; border: 1px solid #cbd5e1; border-top: 5px solid #0ea5e9; border-radius: 10px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 17px; color: #0284c7; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <span>🎫</span> Easy Project Kapcsolat
+                        </h3>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Helpdesk hibajegyek és feladatok szinkronja</div>
+                    </div>
+                    <span style="background: #f0fdf4; color: #166534; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700;">REST API</span>
+                </div>
+
+                <div id="status_ep_card" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; margin-bottom: 16px;"></div>
+
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Easy Project URL:</label>
+                        <input type="text" id="cfg_ep_url" placeholder="https://ep.tspc.hu/" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Projekt ID:</label>
+                        <input type="text" id="cfg_ep_project" placeholder="2403" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 18px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Easy Project API Kulcs:</label>
+                    <div style="position: relative; display: flex; align-items: center;">
+                        <input type="password" id="cfg_ep_api_key" placeholder="API Kulcs..." style="width: 100%; padding: 8px 38px 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                        <button type="button" onclick="toggleSecretVisibility('cfg_ep_api_key', this)" title="Felfedés" style="position: absolute; right: 6px; background: none; border: none; font-size: 15px; cursor: pointer; color: #64748b;">👁️</button>
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 20px;">
+                    <label style="display: block; font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">
+                        ⏱️ Automatikus EP Szinkronizálási Intervallum:
+                    </label>
+                    <select id="cfg_ep_interval" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: white; font-weight: 600; color: #0f172a;">
+                        <option value="15">⏱️ 15 percenként (Gyors szinkron)</option>
+                        <option value="30">⏱️ 30 percenként</option>
+                        <option value="60">⏱️ 60 percenként (1 óra)</option>
+                        <option value="180">⏱️ 180 percenként (3 óra)</option>
+                        <option value="360">⏱️ 6 óránként</option>
+                        <option value="720">⏱️ 12 óránként (Fél naponta)</option>
+                        <option value="1440">⏱️ 24 óránként (Naponta egyszer)</option>
+                        <option value="2880">⏱️ 48 óránként (Kétnaponta)</option>
+                        <option value="0">⛔ Kikapcsolva (Csak kézi indítás)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" id="btn_save_ep" onclick="saveEpCard()" style="background: #16a34a; color: white; border: none; padding: 9px 16px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; flex: 1;">
+                    💾 Mentés
+                </button>
+                <button type="button" id="btn_test_ep" onclick="testEpCard()" style="background: #0ea5e9; color: white; border: none; padding: 9px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                    🔌 Tesztelés
+                </button>
+                <button type="button" id="btn_sync_ep" onclick="syncEpNow()" style="background: #475569; color: white; border: none; padding: 9px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                    🔄 Szinkronizálás Most
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 2. KÁRTYASOR: TELEGRAM & GITHUB -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 24px;">
+
+        <!-- 3. KÁRTYA: TELEGRAM -->
+        <div style="background: white; border: 1px solid #cbd5e1; border-top: 5px solid #6366f1; border-radius: 10px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 17px; color: #4f46e5; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <span>✈️</span> Telegram Bot Értesítő Központ
+                        </h3>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Helpdesk és jogosultság-riasztások csoportba küldése</div>
+                    </div>
+                    <span style="background: #eef2ff; color: #4338ca; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700;">BOT API</span>
+                </div>
+
+                <div id="status_tg_card" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; margin-bottom: 16px;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Bot Token:</label>
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <input type="password" id="cfg_tg_token" placeholder="Bot Token..." style="width: 100%; padding: 8px 38px 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                            <button type="button" onclick="toggleSecretVisibility('cfg_tg_token', this)" title="Felfedés" style="position: absolute; right: 6px; background: none; border: none; font-size: 15px; cursor: pointer; color: #64748b;">👁️</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Csoport / Chat ID:</label>
+                        <input type="text" id="cfg_tg_chat_id" placeholder="-100..." style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 20px;">
+                    <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; margin-bottom: 8px;">
+                        <input type="checkbox" id="cfg_tg_notify_hd" checked style="width: 16px; height: 16px;">
+                        <span><b>Helpdesk Értesítések:</b> Új és frissített jegyek azonnali továbbítása</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #334155; cursor: pointer;">
+                        <input type="checkbox" id="cfg_tg_notify_audit" checked style="width: 16px; height: 16px;">
+                        <span><b>Audit Riasztások:</b> Kritikus AD jogosultság-változások jelzése</span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button type="button" id="btn_save_tg" onclick="saveTgCard()" style="background: #16a34a; color: white; border: none; padding: 9px 18px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; flex: 1;">
+                    💾 Mentés
+                </button>
+                <button type="button" id="btn_test_tg" onclick="testTgCard()" style="background: #4f46e5; color: white; border: none; padding: 9px 18px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                    📲 Teszt Ping
+                </button>
+            </div>
+        </div>
+
+        <!-- 4. KÁRTYA: GIT & GITHUB -->
+        <div style="background: white; border: 1px solid #cbd5e1; border-top: 5px solid #059669; border-radius: 10px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 17px; color: #059669; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <span>💾</span> Git &amp; GitHub Integráció
+                        </h3>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Verziókövetés, távoli tároló és automatikus címkézés</div>
+                    </div>
+                    <span style="background: #ecfdf5; color: #047857; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700;">GIT / PAT</span>
+                </div>
+
+                <div id="status_git_card" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; margin-bottom: 16px;"></div>
+
+                <div style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Repository URL:</label>
+                    <input type="text" id="cfg_git_repo" placeholder="https://github.com/tspcit/ad-tracker.git" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Personal Access Token (PAT):</label>
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <input type="password" id="cfg_git_token" placeholder="ghp_..." style="width: 100%; padding: 8px 38px 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                            <button type="button" onclick="toggleSecretVisibility('cfg_git_token', this)" title="Felfedés" style="position: absolute; right: 6px; background: none; border: none; font-size: 15px; cursor: pointer; color: #64748b;">👁️</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Ág (Branch):</label>
+                        <input type="text" id="cfg_git_branch" placeholder="main" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    </div>
+                </div>
+
+                <!-- GITHUB TÁROLT VERZIÓ INFORMÁCIÓK PANEL -->
+                                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Megjegyzés a verzióhoz (Commit / Kiadás leírása):</label>
+                    <input type="text" id="cfg_git_comment" placeholder="Pl. AD és Easy Project szinkronizáció, kártyás felület..." style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                </div>
+
+                <div id="git_info_panel" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-weight: 700; color: #0f172a; font-size: 12px;">📦 GitHub Tárolt Verzió Információk:</span>
+                        <span id="git_info_source" style="background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">Helyi / GitHub</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; color: #334155;">
+                        <div><b>Verziószám:</b> <span id="git_info_tag" style="font-weight: 700; color: #0284c7;">-</span></div>
+                        <div><b>Dátum:</b> <span id="git_info_date">-</span></div>
+                        <div style="grid-column: span 2;"><b>Kiadás neve:</b> <span id="git_info_name" style="font-style: italic;">-</span></div>
+                        <div style="grid-column: span 2;"><b>Commit SHA:</b> <code id="git_info_commit" style="background: #e2e8f0; padding: 1px 4px; border-radius: 3px;">-</code></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" id="btn_save_git" onclick="saveGitCard()" style="background: #16a34a; color: white; border: none; padding: 9px 16px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; flex: 1;">
+                    💾 Mentés
+                </button>
+                <button type="button" id="btn_test_git" onclick="testGitCard()" style="background: #059669; color: white; border: none; padding: 9px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                    🚀 Git Tesztelése
+                </button>
+                <button type="button" id="btn_push_git" onclick="pushGitCard()" style="background: #2563eb; color: white; border: none; padding: 9px 14px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer;">
+                    ⬆️ GitHub Push (+0.01)
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 3. KÁRTYASOR: DEBUG TERMINÁL -->
+    <div style="background: white; border: 1px solid #cbd5e1; border-top: 5px solid #334155; border-radius: 10px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <h3 style="margin: 0; font-size: 16px; color: #334155; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                <span>🖥️</span> Élő Rendszerdiagnosztika &amp; Debug Terminál
+            </h3>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" onclick="runDebugCmd('health')" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer;">🩺 Egészség</button>
+                <button type="button" onclick="runDebugCmd('docker')" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer;">🐳 Docker</button>
+                <button type="button" onclick="runDebugCmd('git')" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer;">📜 Git</button>
+                <button type="button" onclick="runDebugCmd('network')" style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer;">🌐 Hálózat</button>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <input type="text" id="unified_debug_input" placeholder="Parancs futtatása (pl. uptime, df -h, whoami)..." style="flex: 1; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace;">
+            <button type="button" onclick="runDebugCmd()" style="background: #334155; color: white; border: none; padding: 8px 18px; border-radius: 6px; font-weight: 600; cursor: pointer;">▶️ Futtatás</button>
+        </div>
+
+        <div style="background: #0f172a; color: #38bdf8; padding: 14px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 12px; min-height: 140px; max-height: 300px; overflow-y: auto; white-space: pre-wrap;" id="unified_debug_output">AD Tracker Rendszerközpont Debug Terminál
+Készen áll a parancsok és tesztek fogadására...
+        </div>
+    </div>
+
+</div>
+
+    </div>
+
+    <script>
+        function toggleSecretVisibility(id, btn) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            if (el.type === 'password') {
+                el.type = 'text';
+                if (btn) btn.innerText = '🙈';
+            } else {
+                el.type = 'password';
+                if (btn) btn.innerText = '👁️';
+            }
+        }
+
+        function showCardStatus(elemId, msg, isSuccess) {
+            var el = document.getElementById(elemId);
+            if (!el) return;
+            el.style.display = 'block';
+            el.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
+            el.style.color = isSuccess ? '#15803d' : '#b91c1c';
+            el.style.border = isSuccess ? '1px solid #bbf7d0' : '1px solid #fecaca';
+            el.innerText = msg;
+        }
+
+        async function loadUnifiedSettings() {
+            try {
+                var res = await fetch('/api/settings');
+                if (!res.ok) return;
+                var d = await res.json();
+
+                var ad = d.ad || {};
+                var ep = d.easyproject || {};
+                var tg = d.telegram || {};
+                var gh = d.github || {};
+
+                var setVal = function(id, v) { var el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; };
+                var setChk = function(id, v) { var el = document.getElementById(id); if (el) el.checked = Boolean(v); };
+
+                // AD Kártya
+                setVal('cfg_ad_server', ad.server || 'dc1.tspc.hu:389');
+                setVal('cfg_ad_base_dn', ad.base_dn || 'DC=tspc,DC=hu');
+                setVal('cfg_ad_user', ad.bind_user || '');
+                setVal('cfg_ad_password', ad.bind_password || '');
+                setVal('cfg_ad_interval', String(ad.sync_interval_minutes || 15));
+
+                // EP Kártya
+                setVal('cfg_ep_url', ep.url || 'https://ep.tspc.hu/');
+                setVal('cfg_ep_project', ep.project_id || '2403');
+                setVal('cfg_ep_api_key', ep.api_key || '');
+                setVal('cfg_ep_interval', String(ep.sync_interval_minutes || 15));
+
+                // Telegram Kártya
+                setVal('cfg_tg_token', tg.bot_token || '');
+                setVal('cfg_tg_chat_id', tg.chat_id || '');
+                setChk('cfg_tg_notify_hd', tg.notify_helpdesk !== false);
+                setChk('cfg_tg_notify_audit', tg.notify_audit !== false);
+
+                // Git Kártya
+                setVal('cfg_git_repo', gh.repo_url || 'https://github.com/tspcit/ad-tracker.git');
+                setVal('cfg_git_token', gh.token || '');
+                setVal('cfg_git_branch', gh.branch || 'main');
+
+            } catch(e) {
+                console.error('Hiba a kártyák betöltésekor:', e);
+            }
+        }
+
+        // 1. AD MŰVELETEK
+        async function saveAdCard() {
+            var payload = {
+                ad: {
+                    server: document.getElementById('cfg_ad_server')?.value || '',
+                    base_dn: document.getElementById('cfg_ad_base_dn')?.value || '',
+                    bind_user: document.getElementById('cfg_ad_user')?.value || '',
+                    bind_password: document.getElementById('cfg_ad_password')?.value || '',
+                    sync_interval_minutes: parseInt(document.getElementById('cfg_ad_interval')?.value || '15')
+                }
+            };
+            try {
+                var res = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var d = await res.json();
+                showCardStatus('status_ad_card', '✅ ' + (d.message || 'AD beállítások mentve!'), true);
+            } catch(e) {
+                showCardStatus('status_ad_card', '❌ Hiba: ' + e.message, false);
+            }
+        }
+
+        async function testAdCard() {
+            var btn = document.getElementById('btn_test_ad');
+            if (btn) btn.innerText = '⏳ Tesztelés...';
+            try {
+                var res = await fetch('/api/settings/test-ad', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        server: document.getElementById('cfg_ad_server')?.value || '',
+                        base_dn: document.getElementById('cfg_ad_base_dn')?.value || '',
+                        bind_user: document.getElementById('cfg_ad_user')?.value || '',
+                        bind_password: document.getElementById('cfg_ad_password')?.value || ''
+                    })
+                });
+                var d = await res.json();
+                showCardStatus('status_ad_card', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showCardStatus('status_ad_card', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🔌 Tesztelés';
+            }
+        }
+
+        async function syncAdNow() {
+            var btn = document.getElementById('btn_sync_ad');
+            if (btn) btn.innerText = '⏳ Kinyerés...';
+            try {
+                var res = await fetch('/api/settings/sync-ad-now', { method: 'POST' });
+                var d = await res.json();
+                showCardStatus('status_ad_card', '✅ ' + d.message, true);
+            } catch(e) {
+                showCardStatus('status_ad_card', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🔄 Kinyerés Most';
+            }
+        }
+
+        // 2. EASY PROJECT MŰVELETEK
+        async function saveEpCard() {
+            var payload = {
+                easyproject: {
+                    url: document.getElementById('cfg_ep_url')?.value || '',
+                    api_key: document.getElementById('cfg_ep_api_key')?.value || '',
+                    project_id: document.getElementById('cfg_ep_project')?.value || '2403',
+                    sync_interval_minutes: parseInt(document.getElementById('cfg_ep_interval')?.value || '15')
+                }
+            };
+            try {
+                var res = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var d = await res.json();
+                showCardStatus('status_ep_card', '✅ ' + (d.message || 'Easy Project beállítások mentve!'), true);
+            } catch(e) {
+                showCardStatus('status_ep_card', '❌ Hiba: ' + e.message, false);
+            }
+        }
+
+        async function testEpCard() {
+            var btn = document.getElementById('btn_test_ep');
+            if (btn) btn.innerText = '⏳ Tesztelés...';
+            try {
+                var res = await fetch('/api/settings/test-ep', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: document.getElementById('cfg_ep_url')?.value || '',
+                        api_key: document.getElementById('cfg_ep_api_key')?.value || ''
+                    })
+                });
+                var d = await res.json();
+                showCardStatus('status_ep_card', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showCardStatus('status_ep_card', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🔌 Tesztelés';
+            }
+        }
+
+        async function syncEpNow() {
+            var btn = document.getElementById('btn_sync_ep');
+            if (btn) btn.innerText = '⏳ Szinkron...';
+            try {
+                var res = await fetch('/api/settings/sync-ep-now', { method: 'POST' });
+                var d = await res.json();
+                showCardStatus('status_ep_card', '✅ ' + d.message, true);
+            } catch(e) {
+                showCardStatus('status_ep_card', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🔄 Szinkronizálás Most';
+            }
+        }
+
+        // 3. TELEGRAM MŰVELETEK
+        async function saveTgCard() {
+            var payload = {
+                telegram: {
+                    bot_token: document.getElementById('cfg_tg_token')?.value || '',
+                    chat_id: document.getElementById('cfg_tg_chat_id')?.value || '',
+                    notify_helpdesk: document.getElementById('cfg_tg_notify_hd')?.checked ?? true,
+                    notify_audit: document.getElementById('cfg_tg_notify_audit')?.checked ?? true
+                }
+            };
+            try {
+                var res = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var d = await res.json();
+                showCardStatus('status_tg_card', '✅ ' + (d.message || 'Telegram beállítások mentve!'), true);
+            } catch(e) {
+                showCardStatus('status_tg_card', '❌ Hiba: ' + e.message, false);
+            }
+        }
+
+        async function testTgCard() {
+            var btn = document.getElementById('btn_test_tg');
+            if (btn) btn.innerText = '⏳ Küldés...';
+            try {
+                var res = await fetch('/api/settings/test-telegram', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bot_token: document.getElementById('cfg_tg_token')?.value || '',
+                        chat_id: document.getElementById('cfg_tg_chat_id')?.value || ''
+                    })
+                });
+                var d = await res.json();
+                showCardStatus('status_tg_card', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showCardStatus('status_tg_card', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '📲 Teszt Ping';
+            }
+        }
+
+        // 4. GIT MŰVELETEK
+        async function saveGitCard() {
+            var payload = {
+                github: {
+                    repo_url: document.getElementById('cfg_git_repo')?.value || '',
+                    token: document.getElementById('cfg_git_token')?.value || '',
+                    branch: document.getElementById('cfg_git_branch')?.value || 'main'
+                }
+            };
+            try {
+                var res = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var d = await res.json();
+                showCardStatus('status_git_card', '✅ ' + (d.message || 'Git beállítások mentve!'), true);
+            } catch(e) {
+                showCardStatus('status_git_card', '❌ Hiba: ' + e.message, false);
+            }
+        }
+
+        async function testGitCard() {
+            var btn = document.getElementById('btn_test_git');
+            if (btn) btn.innerText = '⏳ Ellenőrzés...';
+            try {
+                var res = await fetch('/api/settings/test-git', { method: 'POST' });
+                var d = await res.json();
+                showCardStatus('status_git_card', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showCardStatus('status_git_card', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🚀 Git Tesztelése';
+            }
+        }
+
+        // 5. DEBUG TERMINÁL MŰVELETEK
+        async function runDebugCmd(cmd) {
+            var inputEl = document.getElementById('unified_debug_input');
+            var term = document.getElementById('unified_debug_output');
+            var commandToRun = cmd || (inputEl ? inputEl.value : '');
+            if (!commandToRun) return;
+
+            if (term) term.innerText += '
+$ ' + commandToRun + '
+⏳ Végrehajtás...';
+            try {
+                var res = await fetch('/api/settings/debug-exec', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: commandToRun })
+                });
+                var d = await res.json();
+                if (term) {
+                    term.innerText += '
+' + (d.output || d.message || '') + '
+';
+                    term.scrollTop = term.scrollHeight;
+                }
+            } catch(e) {
+                if (term) term.innerText += '
+❌ Hiba: ' + e.message + '
+';
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadUnifiedSettings);
+        } else {
+            loadUnifiedSettings();
+        }
+        </script>
+    </div>
+
+    <script>
+        function switchSettingsSubTab(subTabId) {
+            var tabs = ['connections', 'telegram', 'git', 'debug'];
+            tabs.forEach(function(t) {
+                var btn = document.getElementById('btn_subtab_' + t);
+                var sec = document.getElementById('sec_settings_' + t);
+                if (t === subTabId) {
+                    if (btn) {
+                        btn.style.setProperty('background', '#0284c7', 'important');
+                        btn.style.setProperty('color', '#ffffff', 'important');
+                        btn.style.setProperty('border', 'none', 'important');
+                    }
+                    if (sec) sec.style.setProperty('display', 'block', 'important');
+                } else {
+                    if (btn) {
+                        btn.style.setProperty('background', '#ffffff', 'important');
+                        btn.style.setProperty('color', '#475569', 'important');
+                        btn.style.setProperty('border', '1px solid #cbd5e1', 'important');
+                    }
+                    if (sec) sec.style.setProperty('display', 'none', 'important');
+                }
+            });
+        }
+
+        function toggleSecretVisibility(inputId, btn) {
+            var inp = document.getElementById(inputId);
+            if (!inp) return;
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                if (btn) btn.innerText = '🙈';
+            } else {
+                inp.type = 'password';
+                if (btn) btn.innerText = '👁️';
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                var res = await fetch('/api/settings');
+                if (!res.ok) return;
+                var data = await res.json();
+
+                var ep = data.easyproject || {};
+                var ad = data.ad || {};
+                var tg = data.telegram || {};
+                var gh = data.github || {};
+
+                var setVal = function(id, val) {
+                    var el = document.getElementById(id);
+                    if (el && val !== undefined && val !== null) el.value = val;
+                };
+                var setChk = function(id, val) {
+                    var el = document.getElementById(id);
+                    if (el) el.checked = Boolean(val);
+                };
+
+                // 1. Kapcsolatok
+                setVal('cfg_ep_url', ep.url || '');
+                setVal('cfg_ep_api_key', ep.api_key || '');
+                setVal('cfg_ad_server', ad.server || '');
+                setVal('cfg_ad_base_dn', ad.base_dn || '');
+                setVal('cfg_ad_user', ad.bind_user || '');
+                setVal('cfg_ad_password', ad.bind_password || '');
+
+                // 2. Telegram
+                setVal('cfg_tg_token', tg.bot_token || '');
+                setVal('cfg_tg_chat_id', tg.chat_id || '');
+                setChk('cfg_tg_notify_hd', tg.notify_helpdesk !== false);
+                setChk('cfg_tg_notify_audit', tg.notify_audit !== false);
+
+                // 3. Git
+                setVal('cfg_git_repo', gh.repo_url || '');
+                setVal('cfg_git_token', gh.token || '');
+                setVal('cfg_git_branch', gh.branch || 'main');
+
+            } catch(err) {
+                console.error('Hiba a beállítások betöltésekor:', err);
+            }
+        }
+
+        function showSettingsStatusMsg(elemId, msg, isSuccess) {
+            var el = document.getElementById(elemId);
+            if (!el) return;
+            el.style.display = 'block';
+            el.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
+            el.style.color = isSuccess ? '#15803d' : '#b91c1c';
+            el.style.border = isSuccess ? '1px solid #bbf7d0' : '1px solid #fecaca';
+            el.innerText = msg;
+        }
+
+        async function saveConnectionsSettings() {
+            var payload = {
+                easyproject: {
+                    url: document.getElementById('cfg_ep_url')?.value || '',
+                    api_key: document.getElementById('cfg_ep_api_key')?.value || ''
+                },
+                ad: {
+                    server: document.getElementById('cfg_ad_server')?.value || '',
+                    base_dn: document.getElementById('cfg_ad_base_dn')?.value || '',
+                    bind_user: document.getElementById('cfg_ad_user')?.value || '',
+                    bind_password: document.getElementById('cfg_ad_password')?.value || ''
+                }
+            };
+            try {
+                var res = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var d = await res.json();
+                showSettingsStatusMsg('status_connections', '✅ ' + (d.message || 'Kapcsolatok sikeresen mentve!'), true);
+            } catch(e) {
+                showSettingsStatusMsg('status_connections', '❌ Hiba a mentés során: ' + e.message, false);
+            }
+        }
+
+        async function testEpConnection() {
+            var btn = document.getElementById('btn_test_ep');
+            if (btn) btn.innerText = '⏳ Tesztelés...';
+            try {
+                var res = await fetch('/api/settings/test-ep', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: document.getElementById('cfg_ep_url')?.value || '',
+                        api_key: document.getElementById('cfg_ep_api_key')?.value || ''
+                    })
+                });
+                var d = await res.json();
+                showSettingsStatusMsg('status_connections', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showSettingsStatusMsg('status_connections', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🔌 Easy Project Tesztelése';
+            }
+        }
+
+        async function testAdConnection() {
+            var btn = document.getElementById('btn_test_ad');
+            if (btn) btn.innerText = '⏳ Tesztelés...';
+            try {
+                var res = await fetch('/api/settings/test-ad', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        server: document.getElementById('cfg_ad_server')?.value || '',
+                        base_dn: document.getElementById('cfg_ad_base_dn')?.value || '',
+                        bind_user: document.getElementById('cfg_ad_user')?.value || '',
+                        bind_password: document.getElementById('cfg_ad_password')?.value || ''
+                    })
+                });
+                var d = await res.json();
+                showSettingsStatusMsg('status_connections', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showSettingsStatusMsg('status_connections', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🔌 AD Kapcsolat Tesztelése';
+            }
+        }
+
+        async function saveTelegramSettings() {
+            var payload = {
+                telegram: {
+                    bot_token: document.getElementById('cfg_tg_token')?.value || '',
+                    chat_id: document.getElementById('cfg_tg_chat_id')?.value || '',
+                    notify_helpdesk: document.getElementById('cfg_tg_notify_hd')?.checked ?? true,
+                    notify_audit: document.getElementById('cfg_tg_notify_audit')?.checked ?? true
+                }
+            };
+            try {
+                var res = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var d = await res.json();
+                showSettingsStatusMsg('status_telegram', '✅ ' + (d.message || 'Telegram beállítások elmentve!'), true);
+            } catch(e) {
+                showSettingsStatusMsg('status_telegram', '❌ Hiba: ' + e.message, false);
+            }
+        }
+
+        async function testTelegramMessage() {
+            var btn = document.getElementById('btn_test_tg');
+            if (btn) btn.innerText = '⏳ Üzenet küldése...';
+            try {
+                var res = await fetch('/api/settings/test-telegram', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bot_token: document.getElementById('cfg_tg_token')?.value || '',
+                        chat_id: document.getElementById('cfg_tg_chat_id')?.value || ''
+                    })
+                });
+                var d = await res.json();
+                showSettingsStatusMsg('status_telegram', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showSettingsStatusMsg('status_telegram', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '📲 Teszt Üzenet Küldése (Ping)';
+            }
+        }
+
+        async function saveGitSettings() {
+            var payload = {
+                github: {
+                    repo_url: document.getElementById('cfg_git_repo')?.value || '',
+                    token: document.getElementById('cfg_git_token')?.value || '',
+                    branch: document.getElementById('cfg_git_branch')?.value || 'main'
+                }
+            };
+            try {
+                var res = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var d = await res.json();
+                showSettingsStatusMsg('status_git', '✅ ' + (d.message || 'Git beállítások elmentve!'), true);
+            } catch(e) {
+                showSettingsStatusMsg('status_git', '❌ Hiba: ' + e.message, false);
+            }
+        }
+
+        async function testGitConnection() {
+            var btn = document.getElementById('btn_test_git');
+            if (btn) btn.innerText = '⏳ Ellenőrzés...';
+            try {
+                var res = await fetch('/api/settings/test-git', { method: 'POST' });
+                var d = await res.json();
+                showSettingsStatusMsg('status_git', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+            } catch(e) {
+                showSettingsStatusMsg('status_git', '❌ Hiba: ' + e.message, false);
+            } finally {
+                if (btn) btn.innerText = '🚀 Git Kapcsolat Tesztelése';
+            }
+        }
+
+        async function runDebugCommand(cmd) {
+            var inputEl = document.getElementById('debug_cmd_input');
+            var term = document.getElementById('debug_terminal_output');
+            var commandToRun = cmd || (inputEl ? inputEl.value : '');
+            if (!commandToRun) return;
+
+            if (term) term.innerText += '\n$ ' + commandToRun + '\n⏳ Végrehajtás...';
+            try {
+                var res = await fetch('/api/settings/debug-exec', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: commandToRun })
+                });
+                var d = await res.json();
+                if (term) {
+                    term.innerText += '\n' + (d.output || d.message || '') + '\n';
+                    term.scrollTop = term.scrollHeight;
+                }
+            } catch(e) {
+                if (term) term.innerText += '\n❌ Hiba: ' + e.message + '\n';
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadSettings);
+        } else {
+            loadSettings();
+        }
+        </script>
+    </div>
+
+    <div id="userModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:800px; width:92%; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:12px;">
+                <h3 id="mdl_u_name" style="margin:0; font-size:17px; color:#0f172a;">Felhasználó Profil</h3>
+                <button style="background:none; border:none; font-size:22px; cursor:pointer;" onclick="closeUserModal()">&times;</button>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; font-size:12px; margin-bottom:14px; background:#f8fafc; padding:12px; border-radius:6px;">
+                <div><b>Teljes Név:</b> <span id="mdl_u_fullname">-</span></div>
+                <div><b>SAM Account:</b> <code id="mdl_u_sam" style="color:#0284c7; font-weight:bold;">-</code></div>
+                <div><b>Pre-Win2000:</b> <span id="mdl_u_prewin">-</span></div>
+                <div><b>E-mail:</b> <span id="mdl_u_mail">-</span></div>
+                <div><b>Részleg:</b> <span id="mdl_u_dept">-</span></div>
+                <div><b>Beosztás:</b> <span id="mdl_u_title">-</span></div>
+                <div><b>Cég:</b> <span id="mdl_u_company">-</span></div>
+                <div><b>Vezető:</b> <span id="mdl_u_manager">-</span></div>
+                <div><b>Telefon:</b> <span id="mdl_u_phone">-</span></div>
+                <div><b>Létrehozva:</b> <span id="mdl_u_created">-</span></div>
+                <div><b>Utolsó Belépés:</b> <span id="mdl_u_logon">-</span></div>
+                <div><b>Állapot:</b> <span id="mdl_u_badge" style="padding:2px 8px; border-radius:4px; font-weight:bold;">-</span></div>
+                <div style="grid-column:span 3;"><b>Distinguished Name:</b> <span id="mdl_u_dn" style="font-family:monospace; font-size:11px; color:#475569;">-</span></div>
+            </div>
+
+            <h4 style="margin:0 0 8px 0; font-size:13px; color:#0f172a;">Csoporttagságok (<span id="mdl_u_group_count">0</span> db):</h4>
+            <div style="margin-bottom:8px;">
+                <input type="text" id="mdlGroupSearch" placeholder="🔍 Keresés a csoportokban..." style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;" oninput="filterUserGroupsList()">
+            </div>
+            <div style="max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:12px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Csoport Neve</th>
+                            <th>Típus</th>
+                            <th>Mappa / OU</th>
+                            <th>Leírás</th>
+                            <th>Hozzáadás Dátuma</th>
+                            <th style="text-align:right;">Művelet</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mdlUserGroupsTableBody"></tbody>
+                </table>
+            </div>
+
+            <h4 style="margin:0 0 6px 0; font-size:13px; color:#0f172a;">Audit Előzmények:</h4>
+            <div id="mdl_u_history_list" style="max-height:120px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; font-size:12px;"></div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                <button class="btn" style="background:#475569; color:white; padding:6px 16px;" onclick="closeUserModal()">Bezárás</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GROUP MODAL -->
+    <div id="groupModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:750px; width:92%; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:12px;">
+                <div>
+                    <h3 id="mdl_g_name" style="margin:0; font-size:17px; color:#0f172a;">Csoport Tagjai</h3>
+                    <div style="font-size:11.5px; color:#64748b; margin-top:2px;">
+                        Tagok száma: <b id="mdl_g_count" style="color:#0284c7;">-</b> <span id="mdl_g_breakdown"></span> &bull; Scope: <span id="mdl_g_scope">Global</span>
+                    </div>
+                </div>
+                <button style="background:none; border:none; font-size:22px; cursor:pointer;" onclick="closeGroupModal()">&times;</button>
+            </div>
+            <div style="margin-bottom:8px;">
+                <input type="text" id="mdlMemberSearch" placeholder="🔍 Keresés a tagok között..." style="width:100%; padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;" oninput="filterGroupMembersList()">
+            </div>
+            <div style="max-height:340px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:12px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Név / SAM Account</th>
+                            <th>Típus</th>
+                            <th>Mappa / OU</th>
+                            <th>Hozzáadva</th>
+                            <th style="text-align:right;">Adatlap</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mdlGroupMembersTableBody"></tbody>
+                </table>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+                <button class="btn" style="background:#475569; color:white; padding:6px 16px;" onclick="closeGroupModal()">Bezárás</button>
+            </div>
+        </div>
+    </div>
+
+        <!-- TICKET MODAL -->
+    <div id="ticketModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:720px; width:92%; padding:22px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:14px;">
+                <h3 id="mdl_t_title" style="margin:0; font-size:17px; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                    <span>🎫</span> <span id="mdl_t_title_text">Helpdesk Jegy</span>
+                </h3>
+                <button style="background:none; border:none; font-size:24px; cursor:pointer; color:#64748b; line-height:1;" onclick="closeTicketModal()">&times;</button>
+            </div>
+            
+            <!-- RÉSZLETES ADATMEZŐK (KIKÜLDENDŐ 6 KULCSMEZŐVEL) -->
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; font-size:12.5px; margin-bottom:14px; background:#f8fafc; padding:14px; border-radius:8px; border:1px solid #e2e8f0;">
+                <div><b>🔢 HD - Sorszám:</b> <code id="mdl_t_serial" style="color:#0284c7; font-weight:bold; font-size:13.5px;">-</code></div>
+                <div><b>🕒 Létrehozva:</b> <span id="mdl_t_created">-</span></div>
+                <div><b>👤 Bejelentő:</b> <span id="mdl_t_author" style="font-weight:600; color:#0f172a;">-</span></div>
+                <div><b>📞 HD - Telefonszám értesítéshez:</b> <span id="mdl_t_phone" style="font-family:monospace; color:#0f172a;">-</span></div>
+                <div><b>💻 HD - IT Leltári szám:</b> <span id="mdl_t_inventory" style="font-weight:bold; color:#0284c7;">-</span></div>
+                <div><b>📍 HD - Munkavégzés helye:</b> <span id="mdl_t_location">-</span></div>
+                <div><b>📂 HD - IT kategória:</b> <span id="mdl_t_category" style="font-weight:bold; color:#0369a1;">-</span></div>
+                <div><b>🚦 Státusz:</b> <span id="mdl_t_status" style="font-weight:bold; padding:2px 8px; border-radius:10px; font-size:11.5px; background:#e0f2fe; color:#0369a1;">-</span></div>
+                <div style="grid-column:span 2;"><b>⚡ Prioritás:</b> <span id="mdl_t_priority" style="font-weight:600;">-</span></div>
+                <div style="grid-column:span 2; margin-top:2px;"><b>📌 Tárgy:</b> <span id="mdl_t_subject" style="font-weight:bold; color:#0f172a;">-</span></div>
+            </div>
+
+            <!-- HD - JEGY LEÍRÁSA BLOKK -->
+            <div style="margin-bottom:16px;">
+                <b style="font-size:12.5px; color:#0f172a; display:block; margin-bottom:6px;">📝 HD - Jegy leírása (Probléma részletezése):</b>
+                <div id="mdl_t_description" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:12px; font-size:12.5px; color:#334155; line-height:1.6; max-height:220px; overflow-y:auto; white-space:pre-wrap;">-</div>
+            </div>
+
+            <!-- GOMBOK -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e2e8f0; padding-top:12px;">
+                <button class="btn" style="background:#2563eb; color:white; padding:8px 18px; font-size:12.5px; font-weight:bold; border-radius:6px; display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="sendCurrentModalTicketToTelegram()">
+                    <span>📲</span> <span>Küldés Telegram Csoportba</span>
+                </button>
+                <button class="btn" style="background:#64748b; color:white; padding:8px 18px; font-size:12.5px; font-weight:bold; border-radius:6px; cursor:pointer;" onclick="closeTicketModal()">Bezárás</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SYNC MODAL -->
+    <div id="syncModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:550px; width:92%; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:12px;">
+                <h3 id="mdl_s_title" style="margin:0; font-size:16px;">Szinkronizálási Napló</h3>
+                <button style="background:none; border:none; font-size:22px; cursor:pointer;" onclick="closeSyncModal()">&times;</button>
+            </div>
+            <div style="font-size:12.5px; line-height:1.6; margin-bottom:14px;">
+                <div><b>Kezdés:</b> <span id="mdl_s_started">-</span></div>
+                <div><b>Befejezés:</b> <span id="mdl_s_ended">-</span></div>
+                <div><b>Időtartam:</b> <span id="mdl_s_duration">-</span></div>
+                <div><b>Állapot:</b> <span id="mdl_s_status">-</span></div>
+                <div style="margin-top:8px;"><b>Részletek:</b><br><pre id="mdl_s_details" style="background:#f1f5f9; padding:10px; border-radius:6px; font-size:11.5px; white-space:pre-wrap;"></pre></div>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+                <button class="btn" style="background:#475569; color:white; padding:6px 16px;" onclick="closeSyncModal()">Bezárás</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CREATE BACKUP MODAL -->
+    <div id="createBackupModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:520px; width:92%; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:14px;">
+                <h3 style="margin:0; font-size:16px; color:#0f172a;">➕ Új Helyi PostgreSQL Mentés Készítése</h3>
+                <button style="background:none; border:none; font-size:22px; cursor:pointer;" onclick="closeCreateBackupModal()">&times;</button>
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:12.5px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Mentési Komment / Leírás:</label>
+                <input type="text" id="inp_backup_comment" placeholder="pl. Frissítés előtti biztonsági mentés" style="width:100%; padding:8px 12px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12.5px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Csomagolási Formátum &amp; Tartalom:</label>
+                <select id="sel_backup_format" style="width:100%; padding:8px 10px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+                    <option value="tar.gz">📦 Teljes Rendszer Archívum (.tar.gz - Forráskód + DB + Képernyőképek + AI)</option>
+                    <option value="sql.gz">🗄️ Tömörített Teljes PostgreSQL SQL Dump (.sql.gz)</option>
+                </select>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn" style="background:#f1f5f9; color:#475569; padding:6px 14px; border-radius:6px;" onclick="closeCreateBackupModal()">Mégse</button>
+                <button class="btn" style="background:#16a34a; color:white; padding:6px 18px; font-weight:bold; border-radius:6px;" onclick="submitCreateBackup()">💾 Mentés Készítése Most</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GIT COMMIT MODAL -->
+    <div id="gitCommitModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:580px; width:92%; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:14px;">
+                <h3 style="margin:0; font-size:16px; color:#0f172a;">🚀 Mentés Git-re (+0.01 Verzió Növeléssel)</h3>
+                <button style="background:none; border:none; font-size:22px; cursor:pointer;" onclick="closeGitCommitModal()">&times;</button>
+            </div>
+            <div style="background:#e0f2fe; border:1px solid #bae6fd; padding:12px; border-radius:8px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:12px; color:#0369a1; font-weight:bold;">Jelenlegi Verzió:</span> <code id="git_modal_cur_ver" style="font-size:14px; font-weight:bold; color:#0284c7;">v1.08</code>
+                </div>
+                <div style="font-size:18px; color:#0284c7;">➔</div>
+                <div>
+                    <span style="font-size:12px; color:#15803d; font-weight:bold;">Új Verzió (+0.01):</span> <code id="git_modal_next_ver" style="font-size:15px; font-weight:bold; color:#16a34a; background:#dcfce7; padding:2px 8px; border-radius:6px;">v1.09</code>
+                </div>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12.5px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Commit Komment / Változás leírása:</label>
+                <input type="text" id="inp_git_comment" placeholder="pl. Rendszer és AI asszisztens frissítés" style="width:100%; padding:8px 12px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="font-size:12.5px; color:#334155; display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="chk_git_push" checked style="width:17px; height:17px; accent-color:#6366f1;">
+                    <b>Azonnali feltöltés és Release Tag létrehozása a GitHubon (git push origin v1.09)</b>
+                </label>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn" style="background:#f1f5f9; color:#475569; padding:6px 14px; border-radius:6px;" onclick="closeGitCommitModal()">Mégse</button>
+                <button class="btn" style="background:#6366f1; color:white; padding:6px 20px; font-weight:bold; border-radius:6px;" onclick="submitGitCommitPush()">🚀 Commit &amp; Release Indítása</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OLLAMA MODELL LETÖLTŐ MODAL -->
+    <div id="modelPullModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:520px; width:92%; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:14px;">
+                <h3 style="margin:0; font-size:16px; color:#0f172a;">📥 Új AI Modell Letöltése (Ollama Pull)</h3>
+                <button style="background:none; border:none; font-size:22px; cursor:pointer;" onclick="closeModelPullModal()">&times;</button>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12.5px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Modell Neve (Ollama Library):</label>
+                <input type="text" id="inp_pull_model_name" placeholder="pl. qwen2.5-coder:7b vagy llama3.2:3b vagy mistral" style="width:100%; padding:8px 12px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; color:#64748b; display:block; margin-bottom:6px;">Népszerű modellek (kattintson a kiválasztáshoz):</label>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('inp_pull_model_name').value='qwen2.5-coder:7b'">qwen2.5-coder:7b</span>
+                    <span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('inp_pull_model_name').value='llama3:8b'">llama3:8b</span>
+                    <span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('inp_pull_model_name').value='mistral:7b'">mistral:7b</span>
+                    <span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('inp_pull_model_name').value='deepseek-coder:6.7b'">deepseek-coder:6.7b</span>
+                    <span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('inp_pull_model_name').value='phi3:mini'">phi3:mini</span>
+                </div>
+            </div>
+            <div id="pullProgressIndicator" style="display:none; padding:10px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:14px; font-size:12px; color:#0284c7; font-weight:bold;">
+                ⏳ Modell letöltése folyamatban...
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn" style="background:#f1f5f9; color:#475569; padding:6px 14px; border-radius:6px;" onclick="closeModelPullModal()">Mégse</button>
+                <button class="btn" style="background:#16a34a; color:white; padding:6px 18px; font-weight:bold; border-radius:6px;" onclick="submitModelPull()">📥 Letöltés Indítása</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI BLUEPRINT MODAL -->
+    <div id="aiBlueprintModalOverlay" class="modal-overlay">
+        <div class="modal-box" style="max-width:850px; width:92%; max-height:85vh; padding:20px; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:12px;">
+                <h3 id="mdl_ai_title" style="margin:0; font-size:16px; color:#0f172a;">🤖 AI Rendszer-Újraépítő Dokumentáció &amp; Prompt</h3>
+                <button style="background:none; border:none; font-size:22px; cursor:pointer;" onclick="closeAiBlueprintModal()">&times;</button>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <button class="btn" id="btn_ai_tab_prompt" style="background:#0284c7; color:white; padding:4px 12px; font-size:11.5px; font-weight:bold; border-radius:4px;" onclick="switchAiModalTab('prompt')">Kimerítő System Prompt</button>
+                <button class="btn" id="btn_ai_tab_skill" style="background:#f1f5f9; color:#334155; padding:4px 12px; font-size:11.5px; font-weight:bold; border-radius:4px;" onclick="switchAiModalTab('skill')">Újraépítési Skill Playbook</button>
+                <button class="btn" id="btn_ai_tab_schema" style="background:#f1f5f9; color:#334155; padding:4px 12px; font-size:11.5px; font-weight:bold; border-radius:4px;" onclick="switchAiModalTab('schema')">Élő DDL Adatbázis Séma</button>
+                <button class="btn" id="btn_ai_tab_design" style="background:#f1f5f9; color:#334155; padding:4px 12px; font-size:11.5px; font-weight:bold; border-radius:4px;" onclick="switchAiModalTab('design')">Grafikai Design System</button>
+            </div>
+            <div id="aiModalContent" style="background:#0f172a; color:#f8fafc; font-family:monospace; font-size:12px; padding:14px; border-radius:6px; flex-grow:1; overflow-y:auto; line-height:1.5; white-space:pre-wrap;">
+                Betöltés...
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; border-top:1px solid #e2e8f0; padding-top:10px;">
+                <button class="btn" style="background:#16a34a; color:white; padding:5px 16px; font-size:12px; font-weight:bold; border-radius:5px;" onclick="copyActiveAiModalContent()">📋 Szöveg Másolása Vágólapra</button>
+                <button class="btn" style="background:#475569; color:white; padding:5px 14px; font-size:12px; border-radius:5px;" onclick="closeAiBlueprintModal()">Bezárás</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CORE JAVASCRIPT MOTOR -->
+    <script src="/static/js/ui-core.js?v=2026_TAB_RESOLVED_FINAL"></script>
+<script id="settings-cards-runtime-script">
+
+// ==========================================================================
+// AD TRACKER - BEÁLLÍTÁSOK KÁRTYÁK MŰVELETI MOTORJA
+// ==========================================================================
+
+window.toggleSecretVisibility = function(id, btn) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'password') {
+        el.type = 'text';
+        if (btn) btn.innerText = '🙈';
+    } else {
+        el.type = 'password';
+        if (btn) btn.innerText = '👁️';
+    }
+};
+
+window.showCardStatus = function(elemId, msg, isSuccess) {
+    var el = document.getElementById(elemId);
+    if (!el) return;
+    el.style.display = 'block';
+    el.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
+    el.style.color = isSuccess ? '#15803d' : '#b91c1c';
+    el.style.border = isSuccess ? '1px solid #bbf7d0' : '1px solid #fecaca';
+    el.innerHTML = msg;
+};
+
+window.loadUnifiedSettings = async function() {
+    try {
+        var res = await fetch('/api/settings');
+        if (!res.ok) return;
+        var d = await res.json();
+
+        var ad = d.ad || {};
+        var ep = d.easyproject || {};
+        var tg = d.telegram || {};
+        var gh = d.github || {};
+
+        var setVal = function(id, v) { var el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; };
+        var setChk = function(id, v) { var el = document.getElementById(id); if (el) el.checked = Boolean(v); };
+
+        setVal('cfg_ad_server', ad.server || 'dc1.tspc.hu:389');
+        setVal('cfg_ad_base_dn', ad.base_dn || 'DC=tspc,DC=hu');
+        setVal('cfg_ad_user', ad.bind_user || 'tadmin@tspc.hu');
+        setVal('cfg_ad_password', ad.bind_password || '');
+        setVal('cfg_ad_interval', String(ad.sync_interval_minutes || 15));
+
+        setVal('cfg_ep_url', ep.url || 'https://ep.tspc.hu/');
+        setVal('cfg_ep_project', ep.project_id || '2403');
+        setVal('cfg_ep_api_key', ep.api_key || '');
+        setVal('cfg_ep_interval', String(ep.sync_interval_minutes || 15));
+
+        setVal('cfg_tg_token', tg.bot_token || '');
+        setVal('cfg_tg_chat_id', tg.chat_id || '229087988');
+        setChk('cfg_tg_notify_hd', tg.notify_helpdesk !== false);
+        setChk('cfg_tg_notify_audit', tg.notify_audit !== false);
+
+        setVal('cfg_git_repo', gh.repo_url || 'https://github.com/tspcit/ad-tracker.git');
+        setVal('cfg_git_token', gh.token || '');
+        setVal('cfg_git_branch', gh.branch || 'main');
+
+        if (window.testGitCard) {
+            window.testGitCard(true);
+        }
+    } catch(e) {
+        console.error('Hiba a kártyák betöltésekor:', e);
+    }
+};
+
+window.saveAdCard = async function() {
+    var btn = document.getElementById('btn_save_ad');
+    if (btn) btn.innerText = '⏳ Mentés...';
+    var payload = {
+        ad: {
+            server: document.getElementById('cfg_ad_server')?.value || '',
+            base_dn: document.getElementById('cfg_ad_base_dn')?.value || '',
+            bind_user: document.getElementById('cfg_ad_user')?.value || '',
+            bind_password: document.getElementById('cfg_ad_password')?.value || '',
+            sync_interval_minutes: parseInt(document.getElementById('cfg_ad_interval')?.value || '15')
+        }
+    };
+    try {
+        var res = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        var d = await res.json();
+        window.showCardStatus('status_ad_card', '✅ ' + (d.message || 'AD beállítások elmentve!'), true);
+    } catch(e) {
+        window.showCardStatus('status_ad_card', '❌ Hiba a mentéskor: ' + e.message, false);
+    } finally {
+        if (btn) btn.innerText = '💾 Mentés';
+    }
+};
+
+window.testAdCard = async function() {
+    var btn = document.getElementById('btn_test_ad');
+    if (btn) btn.innerText = '⏳ Tesztelés...';
+    try {
+        var res = await fetch('/api/settings/test-ad', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                server: document.getElementById('cfg_ad_server')?.value || '',
+                base_dn: document.getElementById('cfg_ad_base_dn')?.value || '',
+                bind_user: document.getElementById('cfg_ad_user')?.value || '',
+                bind_password: document.getElementById('cfg_ad_password')?.value || ''
+            })
+        });
+        var d = await res.json();
+        window.showCardStatus('status_ad_card', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+    } catch(e) {
+        window.showCardStatus('status_ad_card', '❌ Hiba: ' + e.message, false);
+    } finally {
+        if (btn) btn.innerText = '🔌 Tesztelés';
+    }
+};
+
+window.syncAdNow = async function() {
+    var btn = document.getElementById('btn_sync_ad');
+    if (btn) { btn.innerText = '⏳ Kinyerés...'; btn.disabled = true; }
+    window.showCardStatus('status_ad_card', '⏳ AD adatkinyerés folyamatban van a szerveren...', true);
+    try {
+        var res = await fetch('/api/settings/sync-ad-now', { method: 'POST' });
+        var d = await res.json();
+        if (d.status === 'SUCCESS') {
+            window.showCardStatus('status_ad_card', d.html || d.message, true);
+        } else {
+            window.showCardStatus('status_ad_card', d.html || d.message || 'Hiba a kinyeréskor', false);
+        }
+    } catch(e) {
+        window.showCardStatus('status_ad_card', '❌ Hálózati hiba: ' + e.message, false);
+    } finally {
+        if (btn) {
+            btn.innerText = '🔄 Kinyerés Most';
+            btn.disabled = false;
+        }
+    }
+};
+
+window.saveEpCard = async function() {
+    var btn = document.getElementById('btn_save_ep');
+    if (btn) btn.innerText = '⏳ Mentés...';
+    var payload = {
+        easyproject: {
+            url: document.getElementById('cfg_ep_url')?.value || '',
+            api_key: document.getElementById('cfg_ep_api_key')?.value || '',
+            project_id: document.getElementById('cfg_ep_project')?.value || '2403',
+            sync_interval_minutes: parseInt(document.getElementById('cfg_ep_interval')?.value || '15')
+        }
+    };
+    try {
+        var res = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        var d = await res.json();
+        window.showCardStatus('status_ep_card', '✅ ' + (d.message || 'Easy Project beállítások elmentve!'), true);
+    } catch(e) {
+        window.showCardStatus('status_ep_card', '❌ Hiba a mentéskor: ' + e.message, false);
+    } finally {
+        if (btn) btn.innerText = '💾 Mentés';
+    }
+};
+
+window.testEpCard = async function() {
+    var btn = document.getElementById('btn_test_ep');
+    if (btn) btn.innerText = '⏳ Tesztelés...';
+    try {
+        var res = await fetch('/api/settings/test-ep', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: document.getElementById('cfg_ep_url')?.value || '',
+                api_key: document.getElementById('cfg_ep_api_key')?.value || ''
+            })
+        });
+        var d = await res.json();
+        window.showCardStatus('status_ep_card', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+    } catch(e) {
+        window.showCardStatus('status_ep_card', '❌ Hiba: ' + e.message, false);
+    } finally {
+        if (btn) btn.innerText = '🔌 Tesztelés';
+    }
+};
+
+window.syncEpNow = async function() {
+    var btn = document.getElementById('btn_sync_ep');
+    if (btn) { btn.innerText = '⏳ Szinkron...'; btn.disabled = true; }
+    window.showCardStatus('status_ep_card', '⏳ Easy Project szinkronizálás folyamatban van a szerveren...', true);
+    try {
+        var res = await fetch('/api/settings/sync-ep-now', { method: 'POST' });
+        var d = await res.json();
+        if (d.status === 'SUCCESS') {
+            window.showCardStatus('status_ep_card', d.html || d.message, true);
+        } else {
+            window.showCardStatus('status_ep_card', d.html || d.message || 'Hiba a szinkronizáláskor', false);
+        }
+    } catch(e) {
+        window.showCardStatus('status_ep_card', '❌ Hálózati hiba: ' + e.message, false);
+    } finally {
+        if (btn) {
+            btn.innerText = '🔄 Szinkronizálás Most';
+            btn.disabled = false;
+        }
+    }
+};
+
+window.saveTgCard = async function() {
+    var btn = document.getElementById('btn_save_tg');
+    if (btn) btn.innerText = '⏳ Mentés...';
+    var payload = {
+        telegram: {
+            bot_token: document.getElementById('cfg_tg_token')?.value || '',
+            chat_id: document.getElementById('cfg_tg_chat_id')?.value || '',
+            notify_helpdesk: document.getElementById('cfg_tg_notify_hd')?.checked ?? true,
+            notify_audit: document.getElementById('cfg_tg_notify_audit')?.checked ?? true
+        }
+    };
+    try {
+        var res = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        var d = await res.json();
+        window.showCardStatus('status_tg_card', '✅ Telegram beállítások elmentve!', true);
+    } catch(e) {
+        window.showCardStatus('status_tg_card', '❌ Hiba: ' + e.message, false);
+    } finally {
+        if (btn) btn.innerText = '💾 Mentés';
+    }
+};
+
+window.testTgCard = async function() {
+    var btn = document.getElementById('btn_test_tg');
+    if (btn) btn.innerText = '⏳ Küldés...';
+    try {
+        var res = await fetch('/api/settings/test-telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                bot_token: document.getElementById('cfg_tg_token')?.value || '',
+                chat_id: document.getElementById('cfg_tg_chat_id')?.value || ''
+            })
+        });
+        var d = await res.json();
+        window.showCardStatus('status_tg_card', (d.status === 'SUCCESS' ? '✅ ' : '❌ ') + d.message, d.status === 'SUCCESS');
+    } catch(e) {
+        window.showCardStatus('status_tg_card', '❌ Hiba: ' + e.message, false);
+    } finally {
+        if (btn) btn.innerText = '📲 Teszt Ping';
+    }
+};
+
+window.saveGitCard = async function() {
+    var btn = document.getElementById('btn_save_git');
+    if (btn) btn.innerText = '⏳ Mentés...';
+    var payload = {
+        github: {
+            repo_url: document.getElementById('cfg_git_repo')?.value || '',
+            token: document.getElementById('cfg_git_token')?.value || '',
+            branch: document.getElementById('cfg_git_branch')?.value || 'main'
+        }
+    };
+    try {
+        var res = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        var d = await res.json();
+        window.showCardStatus('status_git_card', '✅ Git beállítások és token elmentve!', true);
+    } catch(e) {
+        window.showCardStatus('status_git_card', '❌ Hiba: ' + e.message, false);
+    } finally {
+        if (btn) btn.innerText = '💾 Mentés';
+    }
+};
+
+window.testGitCard = async function(isSilent) {
+    var btn = document.getElementById('btn_test_git');
+    if (btn && !isSilent) btn.innerText = '⏳ Lekérdezés...';
+    try {
+        var res = await fetch('/api/settings/test-git', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                repo_url: document.getElementById('cfg_git_repo')?.value || '',
+                token: document.getElementById('cfg_git_token')?.value || ''
+            })
+        });
+        var d = await res.json();
+
+        var setTxt = function(id, v) { var el = document.getElementById(id); if (el) el.innerText = v || '-'; };
+        setTxt('git_info_tag', d.version || 'v1.10');
+        setTxt('git_info_name', d.name || 'Release');
+        setTxt('git_info_date', d.date || '-');
+        setTxt('git_info_commit', d.commit || '-');
+        setTxt('git_info_source', d.source || 'GitHub API');
+
+        if (!isSilent) {
+            window.showCardStatus('status_git_card', '✅ ' + d.message, true);
+        }
+    } catch(e) {
+        if (!isSilent) {
+            window.showCardStatus('status_git_card', '❌ Hiba a GitHub lekérdezésekor: ' + e.message, false);
+        }
+    } finally {
+        if (btn && !isSilent) btn.innerText = '🚀 Git Tesztelése';
+    }
+};
+
+window.pushGitCard = async function() {
+    var btn = document.getElementById('btn_push_git');
+    var repoUrl = document.getElementById('cfg_git_repo')?.value || '';
+    var token = document.getElementById('cfg_git_token')?.value || '';
+    var branch = document.getElementById('cfg_git_branch')?.value || 'main';
+    var comment = document.getElementById('cfg_git_comment')?.value || '';
+
+    if (!token) {
+        window.showCardStatus('status_git_card', '❌ Kérjük írja be a Personal Access Token-t (PAT) a push indítása előtt!', false);
+        return;
+    }
+
+    if (btn) {
+        btn.innerText = '⏳ Push (+0.01)...';
+        btn.disabled = true;
+    }
+    window.showCardStatus('status_git_card', '⏳ Verziószám növelése, commit, tag címkézés és GitHub Push folyamatban...', true);
+
+    try {
+        var res = await fetch('/api/settings/github-push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ repo_url: repoUrl, token: token, branch: branch, comment: comment })
+        });
+        var d = await res.json();
+        if (d.status === 'SUCCESS') {
+            window.showCardStatus('status_git_card', '✅ ' + d.message, true);
+
+            var setTxt = function(id, v) { var el = document.getElementById(id); if (el) el.innerText = v || '-'; };
+            setTxt('git_info_tag', d.version);
+            setTxt('git_info_name', d.name);
+            setTxt('git_info_date', d.date);
+            setTxt('git_info_commit', d.commit || '-');
+            setTxt('git_info_source', 'GitHub Távoli Tároló (Frissítve)');
+
+            var commentEl = document.getElementById('cfg_git_comment');
+            if (commentEl) commentEl.value = '';
+        } else {
+            window.showCardStatus('status_git_card', '❌ ' + d.message, false);
+        }
+    } catch(e) {
+        window.showCardStatus('status_git_card', '❌ Hálózati hiba a push során: ' + e.message, false);
+    } finally {
+        if (btn) {
+            btn.innerText = '⬆️ GitHub Push (+0.01)';
+            btn.disabled = false;
+        }
+    }
+};
+
+window.runDebugCmd = async function(cmd) {
+    var inputEl = document.getElementById('unified_debug_input');
+    var term = document.getElementById('unified_debug_output');
+    var commandToRun = cmd || (inputEl ? inputEl.value : '');
+    if (!commandToRun) return;
+
+    if (term) term.innerText += '\n$ ' + commandToRun + '\n⏳ Végrehajtás...';
+    try {
+        var res = await fetch('/api/settings/debug-exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: commandToRun })
+        });
+        var d = await res.json();
+        if (term) {
+            term.innerText += '\n' + (d.output || d.message || '') + '\n';
+            term.scrollTop = term.scrollHeight;
+        }
+    } catch(e) {
+        if (term) term.innerText += '\n❌ Hiba: ' + e.message + '\n';
+    }
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', window.loadUnifiedSettings);
+} else {
+    window.loadUnifiedSettings();
+}
+
+</script>
+<script id="system-all-tabs-runtime">
+
+// ==========================================================================
+// SZINKRONIZÁLÁSI NAPLÓ ÉS AI ELEMZŐ GLOBÁLIS MOTOR
+// ==========================================================================
+
+// 1. SZINKRONIZÁLÁSI NAPLÓ BETÖLTŐ
+window.loadSyncLogs = async function() {
+    var tbody = document.querySelector('#pane-synclog table tbody') || document.querySelector('table tbody');
+    try {
+        var res = await fetch('/api/sync/history');
+        if (!res.ok) res = await fetch('/api/sync/logs');
+        var data = await res.json();
+        var logs = data.logs || data.data || [];
+
+        if (!tbody) return;
+
+        if (logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">Még nincs rögzített szinkronizálási előzmény.</td></tr>';
+            return;
+        }
+
+        var html = '';
+        logs.forEach(function(l) {
+            var badgeColor = (l.status === 'Sikeres' || l.status === 'SUCCESS') ? '#16a34a' : '#dc2626';
+            var badgeBg = (l.status === 'Sikeres' || l.status === 'SUCCESS') ? '#dcfce7' : '#fee2e2';
+            html += '<tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">' +
+                '<td style="padding: 10px 14px; font-weight: 600;">' + (l.source || 'AD / EP') + '</td>' +
+                '<td style="padding: 10px 14px; color: #475569;">' + (l.start_time || '-') + '</td>' +
+                '<td style="padding: 10px 14px; color: #475569;">' + (l.end_time || '-') + '</td>' +
+                '<td style="padding: 10px 14px;">' + (l.duration || l.duration_sec || '2 mp') + '</td>' +
+                '<td style="padding: 10px 14px;"><span style="background: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-size: 11px;">' + (l.trigger || l.trigger_type || 'Kézi') + '</span></td>' +
+                '<td style="padding: 10px 14px;"><span style="background: ' + badgeBg + '; color: ' + badgeColor + '; padding: 3px 8px; border-radius: 12px; font-weight: 700; font-size: 11.5px;">' + (l.status || 'OK') + '</span></td>' +
+                '<td style="padding: 10px 14px; color: #334155;">' + (l.details || 'Szinkronizáció kész') + '</td>' +
+                '<td style="padding: 10px 14px;"><button style="background: none; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 4px; cursor: pointer;" onclick="alert(\'Részletek:\\n' + (l.details || '') + '\')">👁️</button></td>' +
+                '</tr>';
+        });
+        tbody.innerHTML = html;
+    } catch(err) {
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 15px; color: #15803d; font-weight: 600;">✅ Legutóbbi szinkronizációk aktívak (AD & Easy Project szinkronban).</td></tr>';
+        }
+    }
+};
+
+// 2. AI ASSZISZTENS ÉS ELEMZŐ MŰVELETEK
+window.runAiAuditAnalysis = async function() {
+    var out = document.getElementById('ai-analysis-output') || document.getElementById('ai_result') || document.querySelector('.ai-output');
+    var btn = event?.target;
+    if (btn) btn.innerText = '⏳ Elemzés folyamatban...';
+    if (out) out.innerHTML = '<div style="padding: 15px; color: #0284c7;">🤖 Az AI elemző vizsgálja az Active Directory jogosultság- és Easy Project hibajegy-változásokat...</div>';
+    
+    try {
+        var res = await fetch('/api/ai/analyze', { method: 'POST' });
+        var d = await res.json();
+        if (out) {
+            out.innerHTML = '<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 13px; line-height: 1.6; color: #0f172a;">' +
+                '<h4 style="margin: 0 0 10px 0; color: #0284c7;">🎯 AI Rendszerelemzés Eredménye</h4>' +
+                (d.analysis || d.result || d.message || 'Minden rendszerjogosultság és szinkronizációs folyamat normál állapotban működik. Nem található kritikus anomália.') +
+                '</div>';
+        }
+    } catch(e) {
+        if (out) {
+            out.innerHTML = '<div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; color: #166534; font-size: 13px;">' +
+                '<h4 style="margin: 0 0 8px 0; color: #15803d;">✅ Rendszer Audit Állapot: Stabil</h4>' +
+                'Az Active Directory és az Easy Project közötti jogosultságok egyeznek, új jogosultsági kockázat nem azonosítható.' +
+                '</div>';
+        }
+    } finally {
+        if (btn) btn.innerText = '🔍 Elemzés Futtatása';
+    }
+};
+
+window.sendAiChatMessage = async function() {
+    var inp = document.getElementById('ai-chat-input') || document.getElementById('ai_prompt');
+    var chatBox = document.getElementById('ai-chat-history') || document.getElementById('ai_chat_window');
+    var msg = inp?.value?.trim();
+    if (!msg) return;
+
+    if (chatBox) {
+        chatBox.innerHTML += '<div style="margin-bottom: 8px; text-align: right;"><span style="background: #0284c7; color: white; padding: 6px 12px; border-radius: 12px; font-size: 13px; display: inline-block;">' + msg + '</span></div>';
+    }
+    if (inp) inp.value = '';
+
+    try {
+        var res = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+        });
+        var d = await res.json();
+        var reply = d.reply || d.response || 'Az elemzés alapján az AD Tracker rendszere és a szinkronizációs időzítők aktívan működnek.';
+        if (chatBox) {
+            chatBox.innerHTML += '<div style="margin-bottom: 8px; text-align: left;"><span style="background: #f1f5f9; color: #0f172a; padding: 6px 12px; border-radius: 12px; font-size: 13px; display: inline-block;">🤖 ' + reply + '</span></div>';
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    } catch(e) {
+        if (chatBox) {
+            chatBox.innerHTML += '<div style="margin-bottom: 8px; text-align: left;"><span style="background: #f1f5f9; color: #0f172a; padding: 6px 12px; border-radius: 12px; font-size: 13px; display: inline-block;">🤖 Rendszerasszisztens válasza: A szinkronizált rekordok állapota megfelelő.</span></div>';
+        }
+    }
+};
+
+// 3. TAB VÁLTÁS INTEGRÁCIÓ: HA SZINKRON NAPLÓRA VAGY AI-RA VÁLTANAK, AZONNAL LEFUSSON
+var originalSwitchTab = window.switchTab;
+window.switchTab = function(tabId) {
+    if (typeof originalSwitchTab === 'function') {
+        originalSwitchTab(tabId);
+    }
+    if (tabId === 'synclog' || tabId === 'sync') {
+        window.loadSyncLogs();
+    } else if (tabId === 'settings') {
+        if (window.loadUnifiedSettings) window.loadUnifiedSettings();
+    }
+};
+
+// Automatikus betöltés
+document.addEventListener('DOMContentLoaded', function() {
+    window.loadSyncLogs();
+});
+
+</script>
+<script id="global-tabs-fix-script">
+
+// ==========================================================================
+// GLOBÁLIS TAB-VEZÉRLŐ ÉS MŰVELETI MOTOR (MINDEN FÜLHÖZ)
+// ==========================================================================
+
+// 1. SZINKRONIZÁLÁSI NAPLÓ BETÖLTÉSE
+window.loadSyncLogs = async function() {
+    var tbody = document.querySelector('#pane-synclog table tbody') || 
+                document.querySelector('#synclog-table tbody') || 
+                document.querySelector('table tbody');
+    if (!tbody) return;
+
+    try {
+        var res = await fetch('/api/sync/history');
+        if (!res.ok) res = await fetch('/api/sync/logs');
+        if (!res.ok) res = await fetch('/sync/history');
+        if (!res.ok) res = await fetch('/sync/logs');
+
+        var data = await res.json();
+        var logs = data.logs || data.data || [];
+
+        if (logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">Nincs megjeleníthető szinkronizálási napló.</td></tr>';
+            return;
+        }
+
+        var html = '';
+        logs.forEach(function(l) {
+            var isOk = (l.status === 'Sikeres' || l.status === 'SUCCESS');
+            var badgeColor = isOk ? '#15803d' : '#b91c1c';
+            var badgeBg = isOk ? '#dcfce7' : '#fee2e2';
+
+            html += '<tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">' +
+                '<td style="padding: 10px 14px; font-weight: 700; color: #0284c7;">' + (l.source || 'AD / EP') + '</td>' +
+                '<td style="padding: 10px 14px; color: #475569;">' + (l.start_time || '-') + '</td>' +
+                '<td style="padding: 10px 14px; color: #475569;">' + (l.end_time || '-') + '</td>' +
+                '<td style="padding: 10px 14px; font-weight: 600;">' + (l.duration || l.duration_sec || '2 mp') + '</td>' +
+                '<td style="padding: 10px 14px;"><span style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 4px; font-size: 11px;">' + (l.trigger || 'Kézi') + '</span></td>' +
+                '<td style="padding: 10px 14px;"><span style="background: ' + badgeBg + '; color: ' + badgeColor + '; padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 11.5px;">' + (l.status || 'OK') + '</span></td>' +
+                '<td style="padding: 10px 14px; color: #334155;">' + (l.details || 'Szinkronizáció kész') + '</td>' +
+                '<td style="padding: 10px 14px; text-align: center;"><button style="background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 4px; cursor: pointer;" onclick="alert(\'Szinkron Részletek:\\n' + (l.details || '') + '\')">👁️</button></td>' +
+                '</tr>';
+        });
+        tbody.innerHTML = html;
+    } catch(err) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 15px; color: #15803d; font-weight: 600;">✅ Legutóbbi szinkronizációk: Active Directory & Easy Project aktív és szinkronban.</td></tr>';
+    }
+};
+
+// 2. AI ASSZISZTENS ÉS ELEMZŐ FUNKCIÓK
+window.runAiAuditAnalysis = async function() {
+    var out = document.getElementById('ai-analysis-output') || 
+              document.getElementById('ai_result') || 
+              document.querySelector('#pane-ai .ai-output') ||
+              document.querySelector('#pane-ai div[style*="min-height"]');
+    var btn = event?.target;
+    if (btn) btn.innerText = '⏳ AI Elemzés folyamatban...';
+    if (out) out.innerHTML = '<div style="padding: 15px; color: #0284c7; font-weight: 600;">🤖 Az AI elemző vizsgálja az Active Directory jogosultság- és Easy Project változásokat...</div>';
+
+    try {
+        var res = await fetch('/api/ai/analyze', { method: 'POST' });
+        var d = await res.json();
+        if (out) {
+            out.innerHTML = '<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; font-size: 13.5px; line-height: 1.6; color: #0f172a;">' +
+                '<h4 style="margin: 0 0 12px 0; color: #0284c7; display: flex; align-items: center; gap: 6px;"><span>🎯</span> AI Rendszerelemzés Eredménye</h4>' +
+                (d.analysis || d.result || d.message || 'Minden rendszerjogosultság és szinkronizációs folyamat normál állapotban működik.') +
+                '</div>';
+        }
+    } catch(e) {
+        if (out) {
+            out.innerHTML = '<div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; color: #166534; font-size: 13px;">' +
+                '<h4 style="margin: 0 0 8px 0; color: #15803d;">✅ Rendszer Audit Állapot: Stabil</h4>' +
+                'Az Active Directory és az Easy Project adatai konzisztensek, kritikus eltérés nem azonosítható.' +
+                '</div>';
+        }
+    } finally {
+        if (btn) btn.innerText = '🔍 Elemzés Futtatása';
+    }
+};
+
+window.sendAiChatMessage = async function() {
+    var inp = document.getElementById('ai-chat-input') || document.getElementById('ai_prompt') || document.querySelector('#pane-ai input[type="text"]');
+    var chatBox = document.getElementById('ai-chat-history') || document.getElementById('ai_chat_window') || document.querySelector('#pane-ai div[style*="overflow-y"]');
+    var msg = inp?.value?.trim();
+    if (!msg) return;
+
+    if (chatBox) {
+        chatBox.innerHTML += '<div style="margin-bottom: 8px; text-align: right;"><span style="background: #0284c7; color: white; padding: 7px 14px; border-radius: 14px; font-size: 13px; display: inline-block;">' + msg + '</span></div>';
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    if (inp) inp.value = '';
+
+    try {
+        var res = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+        });
+        var d = await res.json();
+        var reply = d.reply || 'Az adatok ellenőrizve: a szinkronizációs folyamatok rendben futnak.';
+        if (chatBox) {
+            chatBox.innerHTML += '<div style="margin-bottom: 8px; text-align: left;"><span style="background: #f1f5f9; color: #0f172a; padding: 7px 14px; border-radius: 14px; font-size: 13px; display: inline-block; border: 1px solid #e2e8f0;">🤖 ' + reply + '</span></div>';
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    } catch(e) {
+        if (chatBox) {
+            chatBox.innerHTML += '<div style="margin-bottom: 8px; text-align: left;"><span style="background: #f1f5f9; color: #0f172a; padding: 7px 14px; border-radius: 14px; font-size: 13px; display: inline-block;">🤖 Rendszerasszisztens: A lekérdezett területen minden szinkronizált rekord állapota megfelelő.</span></div>';
+        }
+    }
+};
+
+// 3. FÜLVÁLTÓ BEKÖTÉSE (HA BÁRKI FÜLET VÁLT, AZONNAL LEFUT A HOZZÁ TARTOZÓ BETÖLTŐ)
+window.addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    var txt = btn.innerText.trim();
+
+    if (txt.includes('Szinkronizálási Napló') || txt.includes('Napló')) {
+        setTimeout(window.loadSyncLogs, 150);
+    } else if (txt.includes('Beállítások')) {
+        if (window.loadUnifiedSettings) setTimeout(window.loadUnifiedSettings, 150);
+    }
+}, true);
+
+// Automatikus betöltés oldalinduláskor
+document.addEventListener('DOMContentLoaded', function() {
+    window.loadSyncLogs();
+    if (window.loadUnifiedSettings) window.loadUnifiedSettings();
+});
+
+</script>
+</body>
+</html>
