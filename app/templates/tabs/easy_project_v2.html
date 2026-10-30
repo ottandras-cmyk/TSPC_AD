@@ -1,0 +1,383 @@
+<!-- ========================================================
+     EASY PROJECT FELADATOK & PROJEKTEK V2 - ÖNÁLLÓ MODUL
+     ======================================================== -->
+<div id="easy_project2" class="content" style="display:none;">
+
+    <!-- Felső vezérlősáv -->
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:15px;">
+        <div>
+            <h2 style="margin:0; font-size:18px; font-weight:700; color:#0f172a;">📁 Easy Project Feladat- és Projektkezelő</h2>
+            <div style="font-size:12px; color:#64748b; margin-top:3px;">
+                Easy Project integrált feladatok, projektek és készültségi állapotok (#2403 és kapcsolódó feladatok)
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="btn btn-success" id="btn_ep2_sync_now" onclick="triggerEp2Sync()" style="padding:7px 14px; font-size:12px; font-weight:700;">
+                ⚡ Teljes EP Szinkron
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="loadEasyProject2Data()" style="padding:7px 14px; font-size:12px;">
+                🔄 Frissítés
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Statisztikai Kártyák -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-bottom: 18px;">
+        
+        <div class="card-box" style="border-left: 4px solid #0284c7; margin-bottom:0; padding:14px 16px;">
+            <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Összes Feladat</span>
+            <div style="display:flex; align-items:baseline; gap:6px; margin-top:8px;">
+                <span id="ep2_kpi_tasks" style="font-size:26px; font-weight:800; color:#0f172a;">-</span>
+                <span style="font-size:12px; color:#64748b;">db jegy/feladat</span>
+            </div>
+            <div style="font-size:11.5px; color:#64748b; margin-top:4px;">
+                Helyi adatbázisban tárolva
+            </div>
+        </div>
+
+        <div class="card-box" style="border-left: 4px solid #16a34a; margin-bottom:0; padding:14px 16px;">
+            <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Szinkronizált Projektek</span>
+            <div style="display:flex; align-items:baseline; gap:6px; margin-top:8px;">
+                <span id="ep2_kpi_projects" style="font-size:26px; font-weight:800; color:#0f172a;">-</span>
+                <span style="font-size:12px; color:#64748b;">aktív projekt</span>
+            </div>
+            <div style="font-size:11.5px; color:#64748b; margin-top:4px;">
+                Easy Project projektfa
+            </div>
+        </div>
+
+        <div class="card-box" style="border-left: 4px solid #f59e0b; margin-bottom:0; padding:14px 16px;">
+            <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Feladat Változások</span>
+            <div style="display:flex; align-items:baseline; gap:6px; margin-top:8px;">
+                <span id="ep2_kpi_changes" style="font-size:26px; font-weight:800; color:#0f172a;">-</span>
+                <span style="font-size:12px; color:#64748b;">esemény naplózva</span>
+            </div>
+            <div style="font-size:11.5px; color:#64748b; margin-top:4px;">
+                Audit log rekordok száma
+            </div>
+        </div>
+
+        <div class="card-box" style="border-left: 4px solid #8b5cf6; margin-bottom:0; padding:14px 16px;">
+            <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Utolsó Sikeres Szinkron</span>
+            <div id="ep2_kpi_last_sync" style="font-size:16px; font-weight:700; color:#0f172a; margin-top:10px;">
+                -
+            </div>
+            <div id="ep2_sync_feedback" style="font-size:11.5px; color:#64748b; margin-top:4px;">
+                REST API kapcsolat aktív
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Táblázat és Szűrősáv -->
+    <div class="card-box" style="padding: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <h3 style="margin:0; font-size:15px; font-weight:700; color:#0f172a;">Feladatok Listája</h3>
+                <span id="ep2_table_counter" style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">0 db</span>
+            </div>
+            
+            <!-- Szűrők -->
+            <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <select id="ep2_filter_project" onchange="filterEp2Table()" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; margin:0; width:auto; max-width:180px;">
+                    <option value="ALL">Minden projekt</option>
+                </select>
+
+                <select id="ep2_filter_status" onchange="filterEp2Table()" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; margin:0; width:auto;">
+                    <option value="ALL">Minden státusz</option>
+                </select>
+
+                <select id="ep2_filter_tracker" onchange="filterEp2Table()" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; margin:0; width:auto;">
+                    <option value="ALL">Minden típus</option>
+                </select>
+
+                <input type="text" id="ep2_search_input" oninput="filterEp2Table()" placeholder="Keresés feladatra, felelősre..." style="padding:6px 12px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; margin:0; width:220px;">
+            </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; color:#475569; text-align:left;">
+                        <th style="padding:10px 12px; width:75px;">ID</th>
+                        <th style="padding:10px 12px; width:170px;">Projekt</th>
+                        <th style="padding:10px 12px;">Tárgy</th>
+                        <th style="padding:10px 12px; width:110px;">Típus</th>
+                        <th style="padding:10px 12px; width:150px;">Felelős</th>
+                        <th style="padding:10px 12px; width:130px;">Készültség</th>
+                        <th style="padding:10px 12px; width:110px;">Határidő</th>
+                        <th style="padding:10px 12px; width:100px;">Státusz</th>
+                        <th style="padding:10px 12px; width:80px; text-align:center;">Művelet</th>
+                    </tr>
+                </thead>
+                <tbody id="ep2_tasks_tbody">
+                    <tr><td colspan="9" style="text-align:center; padding:20px; color:#64748b;">⏳ Feladatok betöltése...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Feladat Részletező Modál Ablak -->
+<div id="ep2_detail_modal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:750px;">
+        <div class="modal-header">
+            <h3 id="ep2_modal_title" style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">Feladat részletei</h3>
+            <button type="button" class="modal-close" onclick="closeEp2Modal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:20px;">
+            <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:15px; background:#f8fafc; padding:12px; border-radius:6px; border:1px solid #e2e8f0;">
+                <div><b>Projekt:</b> <span id="ep2_m_project">-</span></div>
+                <div><b>Felelős:</b> <span id="ep2_m_assignee">-</span></div>
+                <div><b>Prioritás:</b> <span id="ep2_m_priority">-</span></div>
+                <div><b>Státusz:</b> <span id="ep2_m_status">-</span></div>
+                <div><b>Határidő:</b> <span id="ep2_m_due">-</span></div>
+            </div>
+            
+            <div style="margin-bottom:12px;">
+                <h4 style="margin:0 0 6px 0; font-size:13px; color:#475569;">📝 Leírás:</h4>
+                <div id="ep2_m_desc" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:12px; font-size:13px; line-height:1.5; min-height:80px; white-space:pre-wrap; max-height:220px; overflow-y:auto;">-</div>
+            </div>
+
+            <div id="ep2_m_solution_box" style="margin-bottom:10px; display:none;">
+                <h4 style="margin:0 0 6px 0; font-size:13px; color:#15803d;">💡 Megoldás / Érintett jegyzet:</h4>
+                <div id="ep2_m_solution" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:12px; font-size:13px; color:#166534; line-height:1.5; max-height:180px; overflow-y:auto;">-</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Easy Project V2 Önálló Kliensoldali Logika -->
+<script>
+(function() {
+    window.ep2RawTasks = [];
+
+    window.activateEasyProject2Tab = function() {
+        document.querySelectorAll('.tab, .app-nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.content').forEach(c => {
+            c.classList.remove('active');
+            c.style.display = 'none';
+        });
+
+        const btn = document.getElementById('tab_btn_easy_project');
+        if (btn) btn.classList.add('active');
+
+        const panel = document.getElementById('easy_project2');
+        if (panel) {
+            panel.classList.add('active');
+            panel.style.display = 'block';
+        }
+
+        window.loadEasyProject2Data();
+    };
+
+    window.loadEasyProject2Data = async function() {
+        const tbody = document.getElementById('ep2_tasks_tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:#64748b;">⏳ Feladatok és statisztikák betöltése az API-ról...</td></tr>';
+
+        // 1. Összefoglaló KPI-k lekérése
+        try {
+            const rSum = await fetch('/api/easyproject/summary');
+            if (rSum.ok) {
+                const dSum = await rSum.json();
+                renderEp2Summary(dSum);
+            }
+        } catch(e) {
+            console.error('EP2 Summary hiba:', e);
+        }
+
+        // 2. Feladatok lekérése
+        try {
+            const rTasks = await fetch('/api/easyproject/tasks');
+            if (rTasks.ok) {
+                const dTasks = await rTasks.json();
+                window.ep2RawTasks = dTasks.tasks || [];
+                populateEp2Filters(dTasks.summary || {});
+                renderEp2Table(window.ep2RawTasks);
+            } else {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#dc2626; padding:18px;">❌ Nem sikerült lekérni a feladatokat (HTTP ' + rTasks.status + ')</td></tr>';
+            }
+        } catch(e) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#dc2626; padding:18px;">❌ Hálózati hiba: ' + e.message + '</td></tr>';
+        }
+    };
+
+    function renderEp2Summary(d) {
+        if (!d) return;
+        const elT = document.getElementById('ep2_kpi_tasks');
+        if (elT) elT.innerText = d.tasks_count !== undefined ? d.tasks_count : '-';
+
+        const elP = document.getElementById('ep2_kpi_projects');
+        if (elP) elP.innerText = d.projects_count !== undefined ? d.projects_count : '-';
+
+        const elC = document.getElementById('ep2_kpi_changes');
+        if (elC) elC.innerText = d.changes_count !== undefined ? d.changes_count : '-';
+
+        const elL = document.getElementById('ep2_kpi_last_sync');
+        if (elL) elL.innerText = d.last_sync || '-';
+    }
+
+    function populateEp2Filters(summary) {
+        const selProj = document.getElementById('ep2_filter_project');
+        if (selProj && summary.projects) {
+            const curr = selProj.value;
+            selProj.innerHTML = '<option value="ALL">Minden projekt</option>' + 
+                summary.projects.map(p => `<option value="${p}">${p}</option>`).join('');
+            selProj.value = curr || 'ALL';
+        }
+
+        const selStat = document.getElementById('ep2_filter_status');
+        if (selStat && summary.statuses) {
+            const curr = selStat.value;
+            selStat.innerHTML = '<option value="ALL">Minden státusz</option>' + 
+                summary.statuses.map(s => `<option value="${s}">${s}</option>`).join('');
+            selStat.value = curr || 'ALL';
+        }
+
+        const selTrk = document.getElementById('ep2_filter_tracker');
+        if (selTrk && summary.trackers) {
+            const curr = selTrk.value;
+            selTrk.innerHTML = '<option value="ALL">Minden típus</option>' + 
+                summary.trackers.map(t => `<option value="${t}">${t}</option>`).join('');
+            selTrk.value = curr || 'ALL';
+        }
+    }
+
+    function renderEp2Table(tasks) {
+        const tbody = document.getElementById('ep2_tasks_tbody');
+        const counter = document.getElementById('ep2_table_counter');
+        if (counter) counter.innerText = tasks.length + ' db';
+        if (!tbody) return;
+
+        if (!tasks.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:#64748b;">Nincs a feltételeknek megfelelő feladat.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = tasks.slice(0, 150).map(t => {
+            const ratio = parseInt(t.done_ratio || 0);
+            const isClosed = (t.status || '').toLowerCase().includes('zárt') || (t.status || '').toLowerCase().includes('kész');
+            const statusBg = isClosed ? '#dcfce7' : '#e0f2fe';
+            const statusColor = isClosed ? '#15803d' : '#0369a1';
+
+            return `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:9px 12px; font-weight:700; color:#0f172a;">#${t.id}</td>
+                <td style="padding:9px 12px; font-size:12px; color:#475569;">${t.project_name || '-'}</td>
+                <td style="padding:9px 12px;">
+                    <a href="javascript:void(0)" onclick="openEp2DetailModal(${t.id})" style="font-weight:600; color:#0284c7; text-decoration:none;">
+                        ${t.subject || 'Névtelen feladat'}
+                    </a>
+                </td>
+                <td style="padding:9px 12px; font-size:12px; color:#64748b;">${t.tracker || '-'}</td>
+                <td style="padding:9px 12px; font-size:12.5px; color:#334155;">${t.assigned_to || '-'}</td>
+                <td style="padding:9px 12px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <div style="flex:1; height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden;">
+                            <div style="width:${ratio}%; height:100%; background:${ratio === 100 ? '#16a34a' : '#0284c7'};"></div>
+                        </div>
+                        <span style="font-size:11px; font-weight:700; color:#475569; width:30px;">${ratio}%</span>
+                    </div>
+                </td>
+                <td style="padding:9px 12px; font-size:12px; color:#64748b;">${t.due_date || '-'}</td>
+                <td style="padding:9px 12px;">
+                    <span style="background:${statusBg}; color:${statusColor}; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">
+                        ${t.status || 'Nyitott'}
+                    </span>
+                </td>
+                <td style="padding:9px 12px; text-align:center;">
+                    <button type="button" class="btn btn-secondary" onclick="openEp2DetailModal(${t.id})" style="padding:3px 8px; font-size:11px;">
+                        Megnyitás
+                    </button>
+                </td>
+            </tr>
+            `;
+        }).join('');
+    }
+
+    window.filterEp2Table = function() {
+        const pSel = document.getElementById('ep2_filter_project')?.value || 'ALL';
+        const sSel = document.getElementById('ep2_filter_status')?.value || 'ALL';
+        const tSel = document.getElementById('ep2_filter_tracker')?.value || 'ALL';
+        const q = (document.getElementById('ep2_search_input')?.value || '').toLowerCase().trim();
+
+        const filtered = window.ep2RawTasks.filter(t => {
+            if (pSel !== 'ALL' && t.project_name !== pSel) return false;
+            if (sSel !== 'ALL' && t.status !== sSel) return false;
+            if (tSel !== 'ALL' && t.tracker !== tSel) return false;
+            if (q) {
+                const text = ((t.subject || '') + ' ' + (t.assigned_to || '') + ' ' + (t.project_name || '') + ' ' + (t.id || '')).toLowerCase();
+                if (!text.includes(q)) return false;
+            }
+            return true;
+        });
+
+        renderEp2Table(filtered);
+    };
+
+    window.openEp2DetailModal = function(taskId) {
+        const task = window.ep2RawTasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        document.getElementById('ep2_modal_title').innerText = `Feladat #${task.id}: ${task.subject || ''}`;
+        document.getElementById('ep2_m_project').innerText = task.project_name || '-';
+        document.getElementById('ep2_m_assignee').innerText = task.assigned_to || 'Nincs kiosztva';
+        document.getElementById('ep2_m_priority').innerText = task.priority || 'Normál';
+        document.getElementById('ep2_m_status').innerText = task.status || 'Nyitott';
+        document.getElementById('ep2_m_due').innerText = task.due_date || '-';
+        document.getElementById('ep2_m_desc').innerText = task.description || 'Nincs részletes leírás rögzítve.';
+
+        const solBox = document.getElementById('ep2_m_solution_box');
+        const solTxt = document.getElementById('ep2_m_solution');
+        if (task.solution_html && task.solution_html.trim() !== '') {
+            solBox.style.display = 'block';
+            solTxt.innerHTML = task.solution_html;
+        } else {
+            solBox.style.display = 'none';
+        }
+
+        const modal = document.getElementById('ep2_detail_modal');
+        if (modal) modal.style.display = 'block';
+    };
+
+    window.closeEp2Modal = function() {
+        const modal = document.getElementById('ep2_detail_modal');
+        if (modal) modal.style.display = 'none';
+    };
+
+    window.triggerEp2Sync = async function() {
+        const btn = document.getElementById('btn_ep2_sync_now');
+        const fb = document.getElementById('ep2_sync_feedback');
+        if (btn) { btn.innerText = '⏳ Szinkronizálás...'; btn.disabled = true; }
+        if (fb) fb.innerHTML = '<span style="color:#16a34a; font-weight:700;">⏳ Teljes Easy Project szinkronizáció folyamatban...</span>';
+
+        try {
+            const resp = await fetch('/api/settings/sync-ep-now', { method: 'POST' });
+            const d = await resp.json();
+            if (fb) {
+                fb.innerHTML = d.status === 'SUCCESS' 
+                    ? '✅ Szinkron kész! Frissítve a táblázat.' 
+                    : '❌ Hiba a szinkronkor: ' + (d.message || '-');
+            }
+            window.loadEasyProject2Data();
+        } catch(e) {
+            if (fb) fb.innerHTML = '<span style="color:#b91c1c;">❌ Hiba: ' + e.message + '</span>';
+        } finally {
+            if (btn) { btn.innerText = '⚡ Teljes EP Szinkron'; btn.disabled = false; }
+        }
+    };
+
+    // Fülváltó integráció: ha a menüből vagy kódból easy_project-et hívnak
+    const prevSwitch = window.switchTab;
+    window.switchTab = function(name) {
+        if (name === 'easy_project' || name === 'easy_project2' || name === 'tab-easy_project') {
+            window.activateEasyProject2Tab();
+            return;
+        }
+        if (typeof prevSwitch === 'function') {
+            prevSwitch(name);
+        }
+    };
+})();
+</script>

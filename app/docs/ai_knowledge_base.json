@@ -1,0 +1,98 @@
+{
+  "system_name": "AD Tracker & Rendszerközpont",
+  "generated_at": "2026-10-27 05:13:56",
+  "version": "v1.08 / v1.09",
+  "ad_statistics": {
+    "total_users": 3907,
+    "active_users": 2925,
+    "disabled_users": 982,
+    "total_groups": 858
+  },
+  "helpdesk_statistics": {
+    "total_tickets": 1029,
+    "project_id": 2403
+  },
+  "active_settings": {
+    "TG_BOT_TOKEN": "8629047993:AAHoQnz7G-hZeXXcxlUXejYkAc8FXi5eGqE",
+    "TG_CHAT_ID": "229087988",
+    "GH_REPO": "ottandras-cmyk/TSPC_AD",
+    "GH_TOKEN": "",
+    "EP_URL": "https://ep.tspc.hu/",
+    "EP_API_KEY": "",
+    "AD_SERVER": "dc1.tspc.hu:389",
+    "AD_SEARCH_BASE": "DC=tspc,DC=hu",
+    "TG_NOTIFY_NEW_TICKET": true,
+    "TG_EV_GROUPS": false,
+    "TG_EV_USER_CREATE": false,
+    "TG_EV_USER_DISABLE": false,
+    "TG_EV_SYNC_ERROR": false,
+    "TG_EV_HELPDESK": false,
+    "TG_EV_DAILY_REPORT": false,
+    "system_information": {
+      "application_name": "AD Tracker & Rendszerközpont",
+      "release_version": "v1.08 / v1.09",
+      "architecture": "FastAPI + PostgreSQL 15 + Docker Compose",
+      "web_ui_port": 8080,
+      "host_environment": "Linux Docker Container"
+    },
+    "postgresql_database_connection": {
+      "host": "db",
+      "port": 5432,
+      "database_name": "ad_tracker",
+      "username": "postgres",
+      "password": "postgres",
+      "sqlalchemy_connection_url": "postgresql://postgres:postgres@db:5432/ad_tracker",
+      "connection_pool_size": 10,
+      "managed_tables": [
+        "ad_users",
+        "ad_groups",
+        "ad_audit_log",
+        "ep_tasks",
+        "ep_projects",
+        "ep_tickets"
+      ]
+    },
+    "active_directory_ldap_connection": {
+      "domain": "tspc.hu",
+      "primary_dc_server": "dc1.tspc.hu:389",
+      "search_base": "DC=tspc,DC=hu",
+      "user_container_ou": "OU=TSPC Users,OU=TSPC,DC=tspc,DC=hu",
+      "group_container_ou": "OU=TSPC Groups,OU=TSPC,DC=tspc,DC=hu",
+      "distribution_lists_ou": "OU=Distribution Lists,OU=TSPC,DC=tspc,DC=hu",
+      "bind_username": "TSPC\\ldap_sync",
+      "bind_password": "********",
+      "sync_schedule": "*/15 * * * * (15 percenként)"
+    },
+    "easy_project_helpdesk_connection": {
+      "api_endpoint_url": "https://ep.tspc.hu/",
+      "api_key": "",
+      "helpdesk_project_id": 2403,
+      "helpdesk_project_name": "IT Helpdesk",
+      "sync_schedule": "*/10 * * * * (10 percenként)"
+    },
+    "telegram_bot_notifications": {
+      "bot_username": "@tspc_IT_bot",
+      "bot_api_token": "8629047993:AAHoQnz7G-hZeXXcxlUXejYkAc8FXi5eGqE",
+      "target_chat_id": "229087988",
+      "target_recipient": "Ott András",
+      "live_polling_interval_sec": 5,
+      "monitored_events": {
+        "ticket_alert": true,
+        "ad_group_changes": false,
+        "ad_user_created": false,
+        "ad_user_disabled": false,
+        "sync_connection_failure": false,
+        "helpdesk_new_ticket": false,
+        "daily_summary_report": false
+      }
+    },
+    "github_version_control": {
+      "repository": "ottandras-cmyk/TSPC_AD",
+      "default_branch": "main",
+      "personal_access_token": "",
+      "current_detected_version": "v1.08",
+      "next_planned_version": "v1.09",
+      "release_api_endpoint": "https://api.github.com/repos/ottandras-cmyk/TSPC_AD/releases"
+    }
+  }
+}

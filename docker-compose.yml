@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  ad-sync-app:
+    build: .
+    container_name: ad_sync_app
+    restart: unless-stopped
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./app:/app
+      - ./.git:/app/.git
+    env_file:
+      - .env

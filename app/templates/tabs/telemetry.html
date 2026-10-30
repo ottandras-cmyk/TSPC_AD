@@ -1,0 +1,357 @@
+<!-- 6. TELEMETRIA & RENDSZERÁLLAPOT -->
+    <div id="pane-telemetry" class="app-tab-pane">
+
+        <!-- Fejléc és Vezérlők -->
+        <div class="card-box" style="padding:14px 18px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+                <h3 style="margin:0; font-size:17px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                    <span>📊</span> Rendszerállapot &amp; Hardver Telemetria
+                </h3>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                    Élő szervererőforrás-kihasználtság, PostgreSQL adatbázis metrikák és webes audit napló
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:#475569; margin:0; cursor:pointer;">
+                    <input type="checkbox" id="t_auto_refresh_chk" onchange="toggleTelemetryAutoRefresh()" style="margin:0; width:auto;">
+                    <span>Auto-frissítés (10 mp)</span>
+                </label>
+                <button type="button" class="btn" onclick="loadTelemetryData()" style="background:#0284c7; color:#ffffff; padding:7px 14px; font-size:12px; font-weight:700; border-radius:6px;">
+                    🔄 Frissítés Most
+                </button>
+            </div>
+        </div>
+
+        <!-- 4 db KPI Erőforrás Kártya -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; margin-bottom:16px;">
+            
+            <!-- CPU -->
+            <div class="card-box" style="border-left:4px solid #0284c7; margin-bottom:0; padding:14px 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Processzor (CPU)</span>
+                    <span id="t_cpu_badge" style="padding:2px 7px; border-radius:10px; font-size:11px; font-weight:700; background:#e0f2fe; color:#0369a1;">Normál</span>
+                </div>
+                <div style="display:flex; align-items:baseline; gap:8px; margin-top:8px;">
+                    <span id="t_cpu_percent" style="font-size:24px; font-weight:800; color:#0f172a;">-%</span>
+                    <span id="t_cpu_cores" style="font-size:12px; color:#64748b;">(- mag)</span>
+                </div>
+                <div style="width:100%; height:6px; background:#e2e8f0; border-radius:3px; margin:8px 0 6px 0; overflow:hidden;">
+                    <div id="t_cpu_bar" style="width:0%; height:100%; background:#0284c7; transition:width 0.3s ease;"></div>
+                </div>
+                <div style="font-size:11.5px; color:#64748b;">
+                    Load avg: <b id="t_cpu_load">-</b>
+                </div>
+            </div>
+
+            <!-- RAM -->
+            <div class="card-box" style="border-left:4px solid #16a34a; margin-bottom:0; padding:14px 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Memória (RAM)</span>
+                    <span id="t_ram_badge" style="padding:2px 7px; border-radius:10px; font-size:11px; font-weight:700; background:#dcfce7; color:#15803d;">OK</span>
+                </div>
+                <div style="display:flex; align-items:baseline; gap:8px; margin-top:8px;">
+                    <span id="t_ram_percent" style="font-size:24px; font-weight:800; color:#0f172a;">-%</span>
+                    <span id="t_ram_ratio" style="font-size:12px; color:#64748b;">(- / - GB)</span>
+                </div>
+                <div style="width:100%; height:6px; background:#e2e8f0; border-radius:3px; margin:8px 0 6px 0; overflow:hidden;">
+                    <div id="t_ram_bar" style="width:0%; height:100%; background:#16a34a; transition:width 0.3s ease;"></div>
+                </div>
+                <div style="font-size:11.5px; color:#64748b;">
+                    Szabad: <b id="t_ram_free">- GB</b>
+                </div>
+            </div>
+
+            <!-- Diszk & DB -->
+            <div class="card-box" style="border-left:4px solid #f59e0b; margin-bottom:0; padding:14px 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Diszk &amp; Adatbázis</span>
+                    <span id="t_db_badge" style="padding:2px 7px; border-radius:10px; font-size:11px; font-weight:700; background:#fef3c7; color:#b45309;">Online</span>
+                </div>
+                <div style="display:flex; align-items:baseline; gap:8px; margin-top:8px;">
+                    <span id="t_disk_percent" style="font-size:24px; font-weight:800; color:#0f172a;">-%</span>
+                    <span id="t_disk_ratio" style="font-size:12px; color:#64748b;">(- / - GB)</span>
+                </div>
+                <div style="width:100%; height:6px; background:#e2e8f0; border-radius:3px; margin:8px 0 6px 0; overflow:hidden;">
+                    <div id="t_disk_bar" style="width:0%; height:100%; background:#f59e0b; transition:width 0.3s ease;"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:11.5px; color:#64748b;">
+                    <span>DB méret: <b id="t_db_size">- MB</b></span>
+                    <span>Kapcsolatok: <b id="t_db_conns">-</b></span>
+                </div>
+            </div>
+
+            <!-- Kiszolgáló & Host -->
+            <div class="card-box" style="border-left:4px solid #8b5cf6; margin-bottom:0; padding:14px 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Üzemidő &amp; Kiszolgáló</span>
+                    <span style="padding:2px 7px; border-radius:10px; font-size:11px; font-weight:700; background:#f3e8ff; color:#7e22ce;">Aktív</span>
+                </div>
+                <div style="margin-top:8px;">
+                    <div style="font-size:11px; color:#64748b;">Futásidő:</div>
+                    <div id="t_uptime" style="font-size:15px; font-weight:700; color:#0f172a;">-</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:11.5px; color:#64748b;">
+                    <span>Host IP: <b id="t_host_ip">-</b></span>
+                    <span>User: <b id="t_cur_user">tadmin</b></span>
+                </div>
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">
+                    GPU: <b id="t_gpu_name">N/A (CPU Mód)</b>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 1. Tábla: Aktív Web Munkamenetek -->
+        <div class="card-box" style="padding:16px; margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h4 style="margin:0; font-size:14.5px; font-weight:700; color:#0f172a;">
+                    👤 Aktív és Legutóbbi Web Munkamenetek
+                </h4>
+                <span id="t_sessions_count" style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:11.5px; font-weight:600;">0 db</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="padding:8px 10px;">Felhasználó</th>
+                            <th style="padding:8px 10px;">Kliens IP</th>
+                            <th style="padding:8px 10px;">Bejelentkezés</th>
+                            <th style="padding:8px 10px;">Utolsó Aktivitás</th>
+                            <th style="padding:8px 10px;">Eszköz / OS</th>
+                            <th style="padding:8px 10px;">Böngésző</th>
+                        </tr>
+                    </thead>
+                    <tbody id="t_sessions_tbody">
+                        <tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">⏳ Munkamenetek betöltése...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 2. Tábla: Rendszer és Web Hozzáférési Napló -->
+        <div class="card-box" style="padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <h4 style="margin:0; font-size:14.5px; font-weight:700; color:#0f172a;">
+                        📜 Rendszer- és Web Hozzáférési Eseménynapló
+                    </h4>
+                    <span id="t_logs_count" style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:11.5px; font-weight:600;">0 esemény</span>
+                </div>
+                <div>
+                    <input type="text" id="t_log_search" oninput="filterTelemetryLogs()" placeholder="🔍 Keresés felhasználóra, IP-re, eseményre..." style="padding:6px 12px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; margin:0; width:280px;">
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="padding:8px 10px; width:160px;">Időpont</th>
+                            <th style="padding:8px 10px; width:150px;">Felhasználó</th>
+                            <th style="padding:8px 10px; width:130px;">Kliens IP</th>
+                            <th style="padding:8px 10px; width:140px;">Művelet</th>
+                            <th style="padding:8px 10px; width:90px;">Státusz</th>
+                            <th style="padding:8px 10px;">Részletek</th>
+                        </tr>
+                    </thead>
+                    <tbody id="t_logs_tbody">
+                        <tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">⏳ Napló betöltése...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+<script id="telemetry-runtime-engine">
+(function() {
+    window.telemetryRawLogs = [];
+    window.telemetryTimer = null;
+
+    window.toggleTelemetryAutoRefresh = function() {
+        var chk = document.getElementById('t_auto_refresh_chk');
+        if (window.telemetryTimer) {
+            clearInterval(window.telemetryTimer);
+            window.telemetryTimer = null;
+        }
+        if (chk && chk.checked) {
+            window.telemetryTimer = setInterval(function() {
+                var p = document.getElementById('pane-telemetry');
+                if (p && (p.classList.contains('active') || p.style.display === 'block')) {
+                    window.loadTelemetryData();
+                }
+            }, 10000);
+        }
+    };
+
+    window.loadTelemetryData = async function() {
+        // 1. Live Hardver Metrikák
+        try {
+            var rLive = await fetch('/api/telemetry/live');
+            if (rLive.ok) {
+                var dLive = await rLive.json();
+                renderTelemetryKpis(dLive);
+            }
+        } catch(e) {
+            console.error('Telemetria Live hiba:', e);
+        }
+
+        // 2. Munkamenetek
+        try {
+            var rSess = await fetch('/api/telemetry/sessions');
+            if (rSess.ok) {
+                var dSess = await rSess.json();
+                renderTelemetrySessions(dSess.sessions || []);
+            }
+        } catch(e) {
+            console.error('Telemetria Munkamenet hiba:', e);
+        }
+
+        // 3. Web Access Logs
+        try {
+            var rLogs = await fetch('/api/telemetry/access-logs');
+            if (!rLogs.ok) rLogs = await fetch('/api/telemetry/web-logs');
+            if (rLogs.ok) {
+                var dLogs = await rLogs.json();
+                window.telemetryRawLogs = dLogs.logs || [];
+                renderTelemetryLogs(window.telemetryRawLogs);
+            }
+        } catch(e) {
+            console.error('Telemetria Web log hiba:', e);
+        }
+    };
+
+    function renderTelemetryKpis(d) {
+        if (!d) return;
+
+        var cpuPct = d.cpu_percent !== undefined ? d.cpu_percent : 0;
+        var elCpuP = document.getElementById('t_cpu_percent');
+        if (elCpuP) elCpuP.innerText = cpuPct + '%';
+        var elCpuC = document.getElementById('t_cpu_cores');
+        if (elCpuC) elCpuC.innerText = '(' + (d.cpu_cores || 4) + ' mag)';
+        var elCpuL = document.getElementById('t_cpu_load');
+        if (elCpuL) elCpuL.innerText = d.cpu_load_avg || '-';
+        var elCpuB = document.getElementById('t_cpu_bar');
+        if (elCpuB) {
+            elCpuB.style.width = Math.min(100, Math.max(0, cpuPct)) + '%';
+            elCpuB.style.background = cpuPct > 80 ? '#dc2626' : (cpuPct > 50 ? '#f59e0b' : '#0284c7');
+        }
+
+        var ramPct = d.ram_percent !== undefined ? d.ram_percent : 0;
+        var elRamP = document.getElementById('t_ram_percent');
+        if (elRamP) elRamP.innerText = ramPct + '%';
+        var elRamR = document.getElementById('t_ram_ratio');
+        if (elRamR) elRamR.innerText = '(' + (d.ram_used_gb || 0) + ' / ' + (d.ram_total_gb || 0) + ' GB)';
+        var elRamF = document.getElementById('t_ram_free');
+        if (elRamF) elRamF.innerText = (d.ram_free_gb || 0) + ' GB';
+        var elRamB = document.getElementById('t_ram_bar');
+        if (elRamB) {
+            elRamB.style.width = Math.min(100, Math.max(0, ramPct)) + '%';
+            elRamB.style.background = ramPct > 85 ? '#dc2626' : (ramPct > 65 ? '#f59e0b' : '#16a34a');
+        }
+
+        var diskPct = d.disk_percent !== undefined ? d.disk_percent : 0;
+        var elDiskP = document.getElementById('t_disk_percent');
+        if (elDiskP) elDiskP.innerText = diskPct + '%';
+        var elDiskR = document.getElementById('t_disk_ratio');
+        if (elDiskR) elDiskR.innerText = '(' + (d.disk_used_gb || 0) + ' / ' + (d.disk_total_gb || 0) + ' GB)';
+        var elDbSz = document.getElementById('t_db_size');
+        if (elDbSz) elDbSz.innerText = (d.db_size_mb || 0) + ' MB';
+        var elDbCn = document.getElementById('t_db_conns');
+        if (elDbCn) elDbCn.innerText = (d.db_connections !== undefined ? d.db_connections : '-');
+        var elDiskB = document.getElementById('t_disk_bar');
+        if (elDiskB) elDiskB.style.width = Math.min(100, Math.max(0, diskPct)) + '%';
+
+        var elUp = document.getElementById('t_uptime');
+        if (elUp) elUp.innerText = d.uptime_str || (d.uptime_hours ? d.uptime_hours + ' óra' : '-');
+        var elIp = document.getElementById('t_host_ip');
+        if (elIp) elIp.innerText = d.host_ip || '-';
+        var elGpu = document.getElementById('t_gpu_name');
+        if (elGpu) elGpu.innerText = d.gpu_name || 'N/A (CPU Mód)';
+        var elUsr = document.getElementById('t_cur_user');
+        if (elUsr) elUsr.innerText = d.current_user?.name || 'tadmin';
+    }
+
+    function renderTelemetrySessions(sessions) {
+        var tbody = document.getElementById('t_sessions_tbody');
+        var count = document.getElementById('t_sessions_count');
+        if (count) count.innerText = sessions.length + ' db';
+        if (!tbody) return;
+
+        if (!sessions.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">Nincs aktív munkamenet.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = sessions.map(function(s) {
+            return '<tr style="border-bottom:1px solid #f1f5f9;">' +
+                '<td style="padding:8px 10px;"><b>👤 ' + (s.username || '-') + '</b></td>' +
+                '<td style="padding:8px 10px; font-family:monospace; color:#334155;">' + (s.client_ip || '-') + '</td>' +
+                '<td style="padding:8px 10px; color:#64748b;">' + (s.login_time || '-') + '</td>' +
+                '<td style="padding:8px 10px; font-weight:600; color:#0f172a;">' + (s.last_activity || '-') + '</td>' +
+                '<td style="padding:8px 10px; color:#475569;">' + (s.os_name || '-') + ' (' + (s.device_type || 'Desktop') + ')</td>' +
+                '<td style="padding:8px 10px; font-size:12px; color:#64748b;">' + (s.browser || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    function renderTelemetryLogs(logs) {
+        var tbody = document.getElementById('t_logs_tbody');
+        var count = document.getElementById('t_logs_count');
+        if (count) count.innerText = logs.length + ' esemény';
+        if (!tbody) return;
+
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">Nincs naplóbejegyzés.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = logs.slice(0, 80).map(function(l) {
+            var isOk = (l.status || '').toUpperCase().includes('SIKER');
+            var stBadge = isOk 
+                ? '<span style="background:#dcfce7; color:#15803d; padding:2px 6px; border-radius:4px; font-weight:700; font-size:11px;">SIKERES</span>'
+                : '<span style="background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:4px; font-weight:700; font-size:11px;">HIBA</span>';
+
+            return '<tr style="border-bottom:1px solid #f1f5f9;">' +
+                '<td style="padding:8px 10px; font-weight:600; color:#334155;">' + (l.timestamp || '-') + '</td>' +
+                '<td style="padding:8px 10px;"><b>' + (l.username || '-') + '</b></td>' +
+                '<td style="padding:8px 10px; font-family:monospace; color:#475569;">' + (l.client_ip || '-') + '</td>' +
+                '<td style="padding:8px 10px;"><span style="background:#f1f5f9; color:#0f172a; padding:2px 6px; border-radius:4px; font-size:11.5px; font-weight:600;">' + (l.action || '-') + '</span></td>' +
+                '<td style="padding:8px 10px;">' + stBadge + '</td>' +
+                '<td style="padding:8px 10px; color:#334155;">' + (l.details || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    window.filterTelemetryLogs = function() {
+        var q = (document.getElementById('t_log_search')?.value || '').toLowerCase().trim();
+        if (!q) {
+            renderTelemetryLogs(window.telemetryRawLogs);
+            return;
+        }
+        var filtered = window.telemetryRawLogs.filter(function(l) {
+            var text = ((l.username || '') + ' ' + (l.client_ip || '') + ' ' + (l.action || '') + ' ' + (l.details || '') + ' ' + (l.timestamp || '')).toLowerCase();
+            return text.includes(q);
+        });
+        renderTelemetryLogs(filtered);
+    };
+
+    // Fülváltás eseményfigyelő (CAPTURE): ha a Telemetria gombra kattintanak, azonnal lekéri az adatokat
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        var txt = btn.textContent || btn.innerText || '';
+        var oc = btn.getAttribute('onclick') || '';
+        if (txt.includes('Telemetria') || oc.includes('telemetry')) {
+            setTimeout(window.loadTelemetryData, 50);
+        }
+    }, true);
+
+    // Oldalinduláskor azonnal lekéri a háttérben
+    document.addEventListener('DOMContentLoaded', function() {
+        window.loadTelemetryData();
+    });
+
+    // Azonnali hívás
+    setTimeout(window.loadTelemetryData, 150);
+})();
+</script>

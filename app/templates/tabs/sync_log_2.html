@@ -1,0 +1,292 @@
+<!-- ========================================================
+     SZINKRONIZÁLÁSI NAPLÓ 2 - SZABVÁNYOS REFERENCIA MODUL
+     ======================================================== -->
+<div id="sync2" class="content" style="display:none;">
+    
+    <!-- KPI és Állapot Kártyák -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 18px;">
+        
+        <!-- AD Kártya -->
+        <div class="card-box" style="border-left: 4px solid #0284c7; margin-bottom: 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase;">Active Directory Szinkron</span>
+                <span id="s2_ad_status_badge" style="padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; background:#e2e8f0; color:#475569;">Lekérés...</span>
+            </div>
+            <div style="margin-top:8px;">
+                <div style="font-size:11.5px; color:#64748b;">Legutóbbi futás:</div>
+                <div id="s2_ad_last_run" style="font-size:14px; font-weight:700; color:#0f172a;">-</div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:12px;">
+                <span>Változások: <b id="s2_ad_changes">-</b></span>
+                <span>Időtartam: <b id="s2_ad_duration">-</b></span>
+            </div>
+            <div style="margin-top:10px;">
+                <button type="button" class="btn btn-primary" id="btn_s2_sync_ad" style="width:100%; font-size:11.5px; padding:6px;" onclick="triggerS2AdSync()">
+                    ⚡ AD Kinyerés Most
+                </button>
+            </div>
+        </div>
+
+        <!-- Easy Project Kártya -->
+        <div class="card-box" style="border-left: 4px solid #16a34a; margin-bottom: 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase;">Easy Project Szinkron</span>
+                <span id="s2_ep_status_badge" style="padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; background:#e2e8f0; color:#475569;">Lekérés...</span>
+            </div>
+            <div style="margin-top:8px;">
+                <div style="font-size:11.5px; color:#64748b;">Legutóbbi futás:</div>
+                <div id="s2_ep_last_run" style="font-size:14px; font-weight:700; color:#0f172a;">-</div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:12px;">
+                <span>Változások: <b id="s2_ep_changes">-</b></span>
+                <span>Időtartam: <b id="s2_ep_duration">-</b></span>
+            </div>
+            <div style="margin-top:10px;">
+                <button type="button" class="btn btn-success" id="btn_s2_sync_ep" style="width:100%; font-size:11.5px; padding:6px;" onclick="triggerS2EpSync()">
+                    ⚡ EP Szinkron Most
+                </button>
+            </div>
+        </div>
+
+        <!-- Műveleti és Állapot Kártya -->
+        <div class="card-box" style="border-left: 4px solid #6366f1; margin-bottom: 0; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+                <span style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase;">Vezérlés & Információ</span>
+                <div id="s2_action_feedback" style="margin-top:8px; font-size:12px; color:#334155; min-height:40px;">
+                    A táblázat közvetlenül a háttéradatbázis naplóbejegyzéseit mutatja.
+                </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:10px;">
+                <button type="button" class="btn btn-secondary" style="flex:1; font-size:12px;" onclick="loadSync2Data()">
+                    🔄 Frissítés
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Táblázat és Keresősáv -->
+    <div class="card-box" style="padding: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <h3 style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">Egyesített Szinkronizációs Előzmények</h3>
+                <span id="s2_row_counter" style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">0 bejegyzés</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <select id="s2_filter_source" onchange="filterSync2Table()" style="padding:6px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; margin:0; width:auto;">
+                    <option value="ALL">Minden forrás</option>
+                    <option value="AD">Csak Active Directory</option>
+                    <option value="EP">Csak Easy Project</option>
+                </select>
+                <input type="text" id="s2_search_input" oninput="filterSync2Table()" placeholder="Keresés részletekben..." style="padding:6px 12px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; margin:0; width:220px;">
+            </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; color:#475569; text-align:left;">
+                        <th style="padding:10px 12px; width:170px;">Forrás</th>
+                        <th style="padding:10px 12px; width:160px;">Indítás</th>
+                        <th style="padding:10px 12px; width:90px;">Időtartam</th>
+                        <th style="padding:10px 12px; width:130px;">Típus</th>
+                        <th style="padding:10px 12px; width:100px;">Státusz</th>
+                        <th style="padding:10px 12px;">Naplóüzenet / Eredmény</th>
+                    </tr>
+                </thead>
+                <tbody id="sync2_table_body">
+                    <tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">⏳ Adatok lekérése...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Önálló, beágyazott működési logika -->
+<script>
+(function() {
+    window.sync2RawLogs = [];
+
+    window.activateSync2Tab = function() {
+        // Minden fül és tartalom inaktiválása
+        document.querySelectorAll('.tab, .app-nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.content').forEach(c => {
+            c.classList.remove('active');
+            c.style.display = 'none';
+        });
+
+        // Sync2 aktiválása
+        const btn = document.getElementById('tab_btn_sync2');
+        if (btn) btn.classList.add('active');
+
+        const panel = document.getElementById('sync2');
+        if (panel) {
+            panel.classList.add('active');
+            panel.style.display = 'block';
+        }
+
+        window.loadSync2Data();
+    };
+
+    window.loadSync2Data = async function() {
+        const tbody = document.getElementById('sync2_table_body');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#64748b;">⏳ Adatok frissítése az API-ról...</td></tr>';
+
+        try {
+            // 1. Státusz és KPI-k
+            const stResp = await fetch('/api/sync/status');
+            if (stResp.ok) {
+                const stData = await stResp.json();
+                renderS2Kpi(stData);
+            }
+
+            // 2. Naplóadatok lekérése
+            const hResp = await fetch('/api/sync/history');
+            if (hResp.ok) {
+                const hData = await hResp.json();
+                window.sync2RawLogs = hData.logs || hData.history || [];
+                renderS2Table(window.sync2RawLogs);
+            } else {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#dc2626; padding:15px;">❌ Hiba: Az API nem elérhető (HTTP ' + hResp.status + ')</td></tr>';
+            }
+        } catch(e) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#dc2626; padding:15px;">❌ Lekérési hiba: ' + e.message + '</td></tr>';
+        }
+    };
+
+    function renderS2Kpi(d) {
+        if (!d) return;
+        const ad = d.ad_sync || {};
+        const ep = d.ep_sync || {};
+
+        const adOk = (ad.status || '').toUpperCase().includes('SIKER');
+        const epOk = (ep.status || '').toUpperCase().includes('SIKER');
+
+        const elAdRun = document.getElementById('s2_ad_last_run');
+        if (elAdRun) elAdRun.innerText = ad.last_run || '-';
+        const elAdChg = document.getElementById('s2_ad_changes');
+        if (elAdChg) elAdChg.innerText = (ad.changes !== undefined ? ad.changes : '-') + ' db';
+        const elAdDur = document.getElementById('s2_ad_duration');
+        if (elAdDur) elAdDur.innerText = ad.duration || '-';
+        const elAdBadge = document.getElementById('s2_ad_status_badge');
+        if (elAdBadge) {
+            elAdBadge.innerText = ad.status || 'NINCS ADAT';
+            elAdBadge.style.background = adOk ? '#dcfce7' : '#fee2e2';
+            elAdBadge.style.color = adOk ? '#15803d' : '#b91c1c';
+        }
+
+        const elEpRun = document.getElementById('s2_ep_last_run');
+        if (elEpRun) elEpRun.innerText = ep.last_run || '-';
+        const elEpChg = document.getElementById('s2_ep_changes');
+        if (elEpChg) elEpChg.innerText = (ep.changes !== undefined ? ep.changes : '-') + ' db';
+        const elEpDur = document.getElementById('s2_ep_duration');
+        if (elEpDur) elEpDur.innerText = ep.duration || '-';
+        const elEpBadge = document.getElementById('s2_ep_status_badge');
+        if (elEpBadge) {
+            elEpBadge.innerText = ep.status || 'NINCS ADAT';
+            elEpBadge.style.background = epOk ? '#dcfce7' : '#fee2e2';
+            elEpBadge.style.color = epOk ? '#15803d' : '#b91c1c';
+        }
+    }
+
+    function renderS2Table(logs) {
+        const tbody = document.getElementById('sync2_table_body');
+        const counter = document.getElementById('s2_row_counter');
+        if (counter) counter.innerText = logs.length + ' bejegyzés';
+        if (!tbody) return;
+
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#64748b;">Nincs megjeleníthető szinkron naplóbejegyzés.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = logs.map(l => {
+            const isAd = (l.source || '').includes('Active Directory');
+            const isOk = (l.status || '').toLowerCase().includes('siker');
+
+            const srcBadge = isAd 
+                ? '<span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-weight:600; font-size:11px;">🏢 Active Directory</span>'
+                : '<span style="background:#f3e8ff; color:#7e22ce; padding:3px 8px; border-radius:4px; font-weight:600; font-size:11px;">🎫 Easy Project</span>';
+
+            const stBadge = isOk
+                ? '<span style="background:#dcfce7; color:#15803d; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">Sikeres</span>'
+                : '<span style="background:#fee2e2; color:#b91c1c; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">Hiba</span>';
+
+            return '<tr style="border-bottom:1px solid #f1f5f9;">' +
+                '<td style="padding:9px 12px;">' + srcBadge + '</td>' +
+                '<td style="padding:9px 12px; font-weight:600; color:#334155;">' + (l.started_at || l.start_time || '-') + '</td>' +
+                '<td style="padding:9px 12px; color:#64748b;">' + (l.duration || '-') + '</td>' +
+                '<td style="padding:9px 12px; font-size:12px; color:#475569;">' + (l.trigger || l.trigger_type || 'Kézi') + '</td>' +
+                '<td style="padding:9px 12px;">' + stBadge + '</td>' +
+                '<td style="padding:9px 12px; color:#1e293b;">' + (l.details || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    window.filterSync2Table = function() {
+        const srcFilter = (document.getElementById('s2_filter_source')?.value || 'ALL');
+        const q = (document.getElementById('s2_search_input')?.value || '').toLowerCase().trim();
+
+        const filtered = window.sync2RawLogs.filter(l => {
+            if (srcFilter === 'AD' && !(l.source || '').includes('Active Directory')) return false;
+            if (srcFilter === 'EP' && !(l.source || '').includes('Easy Project')) return false;
+            if (q) {
+                const text = ((l.source || '') + ' ' + (l.details || '') + ' ' + (l.trigger || '') + ' ' + (l.status || '')).toLowerCase();
+                if (!text.includes(q)) return false;
+            }
+            return true;
+        });
+
+        renderS2Table(filtered);
+    };
+
+    window.triggerS2AdSync = async function() {
+        const btn = document.getElementById('btn_s2_sync_ad');
+        const fb = document.getElementById('s2_action_feedback');
+        if (btn) { btn.innerText = '⏳ AD Kinyerés folyamatban...'; btn.disabled = true; }
+        if (fb) fb.innerHTML = '<span style="color:#0284c7; font-weight:600;">⏳ Élő AD szinkronizálás indítva...</span>';
+
+        try {
+            const resp = await fetch('/api/settings/sync-ad-now', { method: 'POST' });
+            const data = await resp.json();
+            if (fb) fb.innerHTML = data.status === 'SUCCESS' ? '✅ AD kinyerés sikeresen lefutott!' : '❌ Hiba: ' + (data.message || 'Hiba történt');
+            window.loadSync2Data();
+        } catch(e) {
+            if (fb) fb.innerHTML = '<span style="color:#b91c1c;">❌ Hálózati hiba: ' + e.message + '</span>';
+        } finally {
+            if (btn) { btn.innerText = '⚡ AD Kinyerés Most'; btn.disabled = false; }
+        }
+    };
+
+    window.triggerS2EpSync = async function() {
+        const btn = document.getElementById('btn_s2_sync_ep');
+        const fb = document.getElementById('s2_action_feedback');
+        if (btn) { btn.innerText = '⏳ EP Szinkronizálás...'; btn.disabled = true; }
+        if (fb) fb.innerHTML = '<span style="color:#16a34a; font-weight:600;">⏳ Easy Project szinkron indítva...</span>';
+
+        try {
+            const resp = await fetch('/api/settings/sync-ep-now', { method: 'POST' });
+            const data = await resp.json();
+            if (fb) fb.innerHTML = data.status === 'SUCCESS' ? '✅ EP szinkron sikeresen lefutott!' : '❌ Hiba: ' + (data.message || 'Hiba történt');
+            window.loadSync2Data();
+        } catch(e) {
+            if (fb) fb.innerHTML = '<span style="color:#b91c1c;">❌ Hálózati hiba: ' + e.message + '</span>';
+        } finally {
+            if (btn) { btn.innerText = '⚡ EP Szinkron Most'; btn.disabled = false; }
+        }
+    };
+
+    // Kiterjesztjük a meglévő switchTab logikát, hogy ezt a fület is kezelje
+    const prevSwitch = window.switchTab;
+    window.switchTab = function(name) {
+        if (name === 'sync2' || name === 'tab-sync2') {
+            window.activateSync2Tab();
+            return;
+        }
+        if (typeof prevSwitch === 'function') {
+            prevSwitch(name);
+        }
+    };
+})();
+</script>

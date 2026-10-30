@@ -1,0 +1,312 @@
+<!-- SZINKRONIZÁCIÓ KÖZPONT (EGYSÉGESÍTETT 4-FÜLES MODUL) -->
+<div class="sync-module-container" style="display:flex; flex-direction:column; gap:16px;">
+
+  <!-- AL-FÜLEK NAVIGÁCIÓ -->
+  <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:8px 12px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <div style="display:flex; gap:8px;">
+      <button type="button" class="sync-subtab-btn active" onclick="switchSyncSubtab('status')" id="sync-btn-status" style="padding:8px 16px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer; border:none; background:#0284c7; color:#ffffff; transition:all 0.2s;">
+        ⚡ Aktuális állapot
+      </button>
+      <button type="button" class="sync-subtab-btn" onclick="switchSyncSubtab('history')" id="sync-btn-history" style="padding:8px 16px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; color:#475569; transition:all 0.2s;">
+        🕒 Előzmények
+      </button>
+      <button type="button" class="sync-subtab-btn" onclick="switchSyncSubtab('logs')" id="sync-btn-logs" style="padding:8px 16px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; color:#475569; transition:all 0.2s;">
+        📜 Naplók
+      </button>
+      <button type="button" class="sync-subtab-btn" onclick="switchSyncSubtab('stats')" id="sync-btn-stats" style="padding:8px 16px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; color:#475569; transition:all 0.2s;">
+        📊 Statisztikák
+      </button>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span id="sync-live-clock" style="font-size:12px; color:#64748b; font-family:monospace;">--:--:--</span>
+      <button onclick="refreshSyncAllData()" title="Adatok frissítése" style="border:1px solid #cbd5e1; background:#f8fafc; color:#334155; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600;">
+        🔄 Frissítés
+      </button>
+    </div>
+  </div>
+
+  <!-- FOLYAMATJELZŐ SÁV (SZINKRONIZÁCIÓ KÖZBEN) -->
+  <div id="sync-running-banner" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px 16px; align-items:center; justify-content:space-between;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-block; width:16px; height:16px; border:2px solid #0284c7; border-top-color:transparent; border-radius:50%; animation:sync-spin 0.8s linear infinite;"></span>
+      <span id="sync-running-text" style="color:#1e40af; font-weight:600; font-size:13px;">Szinkronizáció folyamatban...</span>
+    </div>
+    <span style="font-size:12px; color:#3b82f6;">Kérjük, várjon...</span>
+  </div>
+
+  <!-- 1. AL-FÜL: AKTUÁLIS ÁLLAPOT -->
+  <div id="sync-tab-pane-status" class="sync-tab-pane" style="display:block;">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; margin-bottom:16px;">
+      
+      <!-- AD KÁRTYA -->
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-left:4px solid #0284c7; border-radius:10px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">Active Directory Címtár</h3>
+          <span id="ad-status-badge" style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700;">Online</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:13px; color:#475569;">
+          <div style="display:flex; justify-content:space-between;"><span>Utolsó lefutás:</span><b id="ad-last-run">Betöltés...</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Futási időtartam:</span><b id="ad-duration">-</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Legutóbbi változások:</span><b id="ad-changes">-</b></div>
+        </div>
+        <div style="margin-top:16px;">
+          <button onclick="triggerSpecificSync('AD')" style="width:100%; background:#0284c7; color:#ffffff; border:none; padding:10px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">
+            ⚡ Csak AD Szinkron Indítása
+          </button>
+        </div>
+      </div>
+
+      <!-- EASY PROJECT KÁRTYA -->
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-left:4px solid #16a34a; border-radius:10px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">Easy Project (#2403 Helpdesk)</h3>
+          <span id="ep-status-badge" style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700;">Online</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:13px; color:#475569;">
+          <div style="display:flex; justify-content:space-between;"><span>Utolsó lefutás:</span><b id="ep-last-run">Betöltés...</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Futási időtartam:</span><b id="ep-duration">-</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Érintett rekordok:</span><b id="ep-changes">-</b></div>
+        </div>
+        <div style="margin-top:16px;">
+          <button onclick="triggerSpecificSync('EP')" style="width:100%; background:#16a34a; color:#ffffff; border:none; padding:10px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">
+            🎫 Csak Helpdesk Szinkron Indítása
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TELJES SZINKRONIZÁCIÓ KÁRTYA -->
+    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:20px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+      <div>
+        <h4 style="margin:0 0 4px 0; font-size:15px; color:#0f172a;">Teljes Rendszerszinkronizáció</h4>
+        <p style="margin:0; font-size:13px; color:#64748b;">Minden Active Directory fiók, csoport és Easy Project hibajegy azonnali frissítése.</p>
+      </div>
+      <button onclick="triggerSpecificSync('ALL')" style="background:#0f172a; color:#ffffff; border:none; padding:12px 24px; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+        🚀 Teljes Szinkron Indítása Most
+      </button>
+    </div>
+  </div>
+
+  <!-- 2. AL-FÜL: ELŐZMÉNYEK -->
+  <div id="sync-tab-pane-history" class="sync-tab-pane" style="display:none;">
+    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 style="margin:0; font-size:15px; color:#0f172a; font-weight:700;">Szinkronizációs Eseménynapló</h3>
+        <input type="text" id="sync-history-filter" onkeyup="filterSyncHistoryTable()" placeholder="Keresés az előzményekben..." style="padding:6px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; width:240px;">
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="sync-history-table" style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;">
+          <thead>
+            <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; color:#475569;">
+              <th style="padding:10px;">Azonosító</th>
+              <th style="padding:10px;">Forrás</th>
+              <th style="padding:10px;">Kezdés</th>
+              <th style="padding:10px;">Időtartam</th>
+              <th style="padding:10px;">Típus</th>
+              <th style="padding:10px;">Státusz</th>
+              <th style="padding:10px;">Részletek</th>
+            </tr>
+          </thead>
+          <tbody id="sync-history-tbody">
+            <tr><td colspan="7" style="text-align:center; padding:20px; color:#94a3b8;">Előzmények betöltése...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. AL-FÜL: NAPLÓK -->
+  <div id="sync-tab-pane-logs" class="sync-tab-pane" style="display:none;">
+    <div style="background:#0f172a; border-radius:10px; padding:16px; color:#f8fafc; font-family:monospace; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:10px; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="display:inline-block; width:10px; height:10px; background:#22c55e; border-radius:50%;"></span>
+          <span style="font-size:13px; font-weight:bold; color:#e2e8f0;">Élő Terminál Konzol</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button onclick="clearSyncTerminal()" style="background:#1e293b; color:#cbd5e1; border:1px solid #475569; padding:4px 10px; border-radius:4px; font-size:11px; cursor:pointer;">Ürítés</button>
+          <button onclick="copySyncTerminal()" style="background:#1e293b; color:#cbd5e1; border:1px solid #475569; padding:4px 10px; border-radius:4px; font-size:11px; cursor:pointer;">Másolás</button>
+        </div>
+      </div>
+      <div id="sync-terminal-body" style="height:360px; overflow-y:auto; font-size:12px; line-height:1.6; color:#94a3b8;">
+        <div>[SZERVER] Szinkronizációs konzol készenlétben...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. AL-FÜL: STATISZTIKÁK -->
+  <div id="sync-tab-pane-stats" class="sync-tab-pane" style="display:none;">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+      
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:16px; text-align:center;">
+        <div style="font-size:12px; color:#64748b; font-weight:600; margin-bottom:6px;">ÖSSZES FUTTATÁS</div>
+        <div id="stat-total-runs" style="font-size:28px; font-weight:800; color:#0f172a;">-</div>
+      </div>
+
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:16px; text-align:center;">
+        <div style="font-size:12px; color:#64748b; font-weight:600; margin-bottom:6px;">SIKERESSÉGI RÁTA</div>
+        <div id="stat-success-rate" style="font-size:28px; font-weight:800; color:#16a34a;">-</div>
+      </div>
+
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:16px; text-align:center;">
+        <div style="font-size:12px; color:#64748b; font-weight:600; margin-bottom:6px;">ÁTLAGOS FUTÁSIDŐ</div>
+        <div id="stat-avg-duration" style="font-size:28px; font-weight:800; color:#0284c7;">-</div>
+      </div>
+
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:16px; text-align:center;">
+        <div style="font-size:12px; color:#64748b; font-weight:600; margin-bottom:6px;">AD / EP MEGOSZLÁS</div>
+        <div id="stat-split" style="font-size:18px; font-weight:800; color:#475569; margin-top:8px;">-</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<style>
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+</style>
+
+<script>
+function switchSyncSubtab(tabName) {
+  document.querySelectorAll('.sync-tab-pane').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.sync-subtab-btn').forEach(btn => {
+    btn.style.background = '#ffffff';
+    btn.style.color = '#475569';
+    btn.style.border = '1px solid #cbd5e1';
+  });
+  const targetPane = document.getElementById('sync-tab-pane-' + tabName);
+  const targetBtn = document.getElementById('sync-btn-' + tabName);
+  if (targetPane) targetPane.style.display = 'block';
+  if (targetBtn) {
+    targetBtn.style.background = '#0284c7';
+    targetBtn.style.color = '#ffffff';
+    targetBtn.style.border = 'none';
+  }
+}
+
+function logToTerminal(msg) {
+  const tb = document.getElementById('sync-terminal-body');
+  if (!tb) return;
+  const d = new Date().toTimeString().split(' ')[0];
+  const div = document.createElement('div');
+  div.innerHTML = `<span style="color:#64748b;">[${d}]</span> ${msg}`;
+  tb.appendChild(div);
+  tb.scrollTop = tb.scrollHeight;
+}
+
+function clearSyncTerminal() {
+  const tb = document.getElementById('sync-terminal-body');
+  if (tb) tb.innerHTML = '<div>[SZERVER] Napló ürítve.</div>';
+}
+
+function copySyncTerminal() {
+  const tb = document.getElementById('sync-terminal-body');
+  if (!tb) return;
+  navigator.clipboard.writeText(tb.innerText).then(() => alert('Napló kimásolva a vágólapra!'));
+}
+
+async function loadSyncStatus() {
+  try {
+    const res = await fetch('/api/sync/status');
+    const data = await res.json();
+    if (data.status === 'SUCCESS') {
+      document.getElementById('ad-last-run').innerText = data.ad_sync.last_run;
+      document.getElementById('ad-duration').innerText = data.ad_sync.duration;
+      document.getElementById('ad-changes').innerText = data.ad_sync.changes + ' db';
+      document.getElementById('ep-last-run').innerText = data.ep_sync.last_run;
+      document.getElementById('ep-duration').innerText = data.ep_sync.duration;
+      document.getElementById('ep-changes').innerText = data.ep_sync.changes + ' db';
+    }
+  } catch(e) {}
+}
+
+async function loadSyncHistory() {
+  try {
+    const res = await fetch('/api/sync/history');
+    const data = await res.json();
+    const tbody = document.getElementById('sync-history-tbody');
+    if (!tbody || !data.logs) return;
+    if (data.logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:15px; color:#94a3b8;">Nincs előzmény.</td></tr>';
+      return;
+    }
+    let html = '';
+    data.logs.forEach(l => {
+      const isSuccess = l.status === 'Sikeres';
+      const badge = isSuccess ? 'background:#dcfce7; color:#15803d;' : 'background:#fee2e2; color:#dc2626;';
+      html += `<tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:10px; font-family:monospace; font-weight:bold;">${l.id}</td>
+        <td style="padding:10px;">${l.source}</td>
+        <td style="padding:10px;">${l.start_time}</td>
+        <td style="padding:10px;">${l.duration}</td>
+        <td style="padding:10px;"><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:11px;">${l.trigger}</span></td>
+        <td style="padding:10px;"><span style="padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; ${badge}">${l.status}</span></td>
+        <td style="padding:10px; color:#64748b;">${l.details || '-'}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+  } catch(e) {}
+}
+
+async function loadSyncStats() {
+  try {
+    const res = await fetch('/api/sync/stats');
+    const d = await res.json();
+    if (d.status === 'SUCCESS') {
+      document.getElementById('stat-total-runs').innerText = d.total_executions;
+      document.getElementById('stat-success-rate').innerText = d.success_rate;
+      document.getElementById('stat-avg-duration').innerText = d.avg_duration_sec + ' mp';
+      document.getElementById('stat-split').innerText = `${d.total_ad_runs} AD / ${d.total_ep_runs} EP`;
+    }
+  } catch(e) {}
+}
+
+async function triggerSpecificSync(target) {
+  const banner = document.getElementById('sync-running-banner');
+  const txt = document.getElementById('sync-running-text');
+  if (banner) banner.style.display = 'flex';
+  if (txt) txt.innerText = `${target === 'ALL' ? 'Teljes' : target} szinkronizáció folyamatban...`;
+  logToTerminal(`Szinkronizáció elindítva [${target}]...`);
+
+  try {
+    const res = await fetch('/api/sync/trigger', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target: target})
+    });
+    const d = await res.json();
+    logToTerminal(`Szinkron lefutott (${d.duration_sec} mp). Eredmény: ${JSON.stringify(d.results)}`);
+  } catch(err) {
+    logToTerminal(`Hiba a szinkronizáció során: ${err.message}`);
+  } finally {
+    if (banner) banner.style.display = 'none';
+    refreshSyncAllData();
+  }
+}
+
+function filterSyncHistoryTable() {
+  const input = document.getElementById('sync-history-filter');
+  const filter = input.value.toLowerCase();
+  const rows = document.querySelectorAll('#sync-history-tbody tr');
+  rows.forEach(r => {
+    r.style.display = r.innerText.toLowerCase().includes(filter) ? '' : 'none';
+  });
+}
+
+function refreshSyncAllData() {
+  loadSyncStatus();
+  loadSyncHistory();
+  loadSyncStats();
+  const c = document.getElementById('sync-live-clock');
+  if (c) c.innerText = new Date().toLocaleTimeString();
+}
+
+// Inicializálás betöltéskor
+refreshSyncAllData();
+setInterval(() => {
+  const c = document.getElementById('sync-live-clock');
+  if (c) c.innerText = new Date().toLocaleTimeString();
+}, 1000);
+</script>
