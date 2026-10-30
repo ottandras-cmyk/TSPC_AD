@@ -1,14 +1,36 @@
 {
-  "EP_URL": "https://ep.tspc.hu/",
-  "EP_API_KEY": "",
-  "EP_PROJECT_ID": "2403",
-  "EP_SYNC_INTERVAL_MINUTES": 15,
-  "AD_SERVER": "dc1.tspc.hu:389",
-  "AD_BASE_DN": "DC=tspc,DC=hu",
-  "AD_BIND_USER": "",
-  "AD_BIND_PASSWORD": "",
-  "AD_SYNC_INTERVAL_MINUTES": 15,
-  "TG_BOT_TOKEN": "",
-  "TG_CHAT_ID": "",
-  "GITHUB_TOKEN": ""
+  "easyproject": {
+    "url": "https://easyproject.example.invalid/",
+    "api_key": "",
+    "project_id": "",
+    "sync_enabled": false,
+    "sync_interval_minutes": 15
+  },
+  "ad": {
+    "server": "ad.example.invalid:389",
+    "base_dn": "DC=example,DC=invalid",
+    "bind_user": "",
+    "bind_password": "",
+    "sync_enabled": false,
+    "sync_interval_minutes": 15
+  },
+  "telegram": {
+    "bot_token": "",
+    "chat_id": "",
+    "notify_helpdesk": true,
+    "notify_audit": true
+  },
+  "sharepoint": {
+    "tenant_id": "",
+    "client_id": "",
+    "client_secret": "",
+    "site_url": "",
+    "sync_enabled": false,
+    "sync_interval_minutes": 60
+  },
+  "github": {
+    "repo_url": "https://github.com/OWNER/REPOSITORY.git",
+    "token": "",
+    "branch": "release/branch"
+  }
 }

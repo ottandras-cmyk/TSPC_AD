@@ -24,6 +24,16 @@
         th { background:#f8fafc; color:#475569; font-weight:700; padding:9px 10px; border-bottom:1px solid #e2e8f0; }
         td { padding:8px 10px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
         tr:hover td { background:#f8fafc; }
+        .data-table-scroll { width:100%; overflow-x:auto; overflow-y:hidden; }
+        .resizable-data-table { table-layout:fixed; }
+        .resizable-data-table th { position:relative; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .resizable-data-table td { overflow-wrap:anywhere; }
+        .table-scroll-mirror { height:16px; overflow-x:auto; overflow-y:hidden; background:#f8fafc; scrollbar-color:#94a3b8 #e2e8f0; }
+        .table-scroll-mirror > div { height:1px; }
+        .table-scroll-mirror-bottom { border-top:1px solid #e2e8f0; }
+        .table-column-resizer { position:absolute; z-index:2; top:0; right:0; width:8px; height:100%; cursor:col-resize; touch-action:none; }
+        .table-column-resizer:hover, .table-column-resizer.is-resizing { background:#0284c7; opacity:.5; }
+        .table-layout-footer { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 14px; color:#64748b; font-size:11.5px; background:#f8fafc; }
         .modal-overlay { position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.65); backdrop-filter:blur(2px); z-index:9999; display:none !important; pointer-events:none !important; align-items:center; justify-content:center; }
         .modal-box { background:#ffffff; border-radius:8px; box-shadow:0 10px 30px rgba(0,0,0,0.25); max-height:85vh; overflow-y:auto; box-sizing:border-box; }
     </style>
@@ -253,8 +263,14 @@
             </div>
 
             <!-- 3. TÁBLÁZAT 7 RENDEZHETŐ OSZLOPPAL -->
-            <div style="overflow-x:auto;">
-                <table style="width:100%; border-collapse:collapse; text-align:left;">
+            <div class="table-scroll-mirror" data-table-scroll="users" aria-label="Felhasználói tábla felső vízszintes görgetősáv">
+                <div></div>
+            </div>
+            <div class="data-table-scroll" data-table-scroll="users">
+                <table id="usersDataTable" class="resizable-data-table" style="width:100%; border-collapse:collapse; text-align:left;">
+                    <colgroup>
+                        <col><col><col><col><col><col><col>
+                    </colgroup>
                     <thead>
                         <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; font-size:12px; color:#475569; text-transform:uppercase;">
                             <th style="padding:10px 14px; width:22%; cursor:pointer; user-select:none;" onclick="sortUsersBy('display_name')">Név <span id="u_sort_display_name">▲</span></th>
@@ -271,6 +287,13 @@
                     </tbody>
                 </table>
             </div>
+            <div class="table-layout-footer">
+                <span>Az oszlopszélesség a fejléc jobb szélének húzásával állítható; a beállítás helyben mentődik. <span data-table-layout-status></span></span>
+                <button class="btn" type="button" onclick="resetDataTableWidths('users')">Alapértelmezett szélességek</button>
+            </div>
+            <div class="table-scroll-mirror table-scroll-mirror-bottom" data-table-scroll="users" aria-label="Felhasználói tábla alsó vízszintes görgetősáv">
+                <div></div>
+            </div>
 
             <!-- 4. ALSÓ LAPOZÓ (EP STÍLUS) -->
             <div id="userPaginationBottom" style="padding:10px 14px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;"></div>
@@ -278,24 +301,40 @@
 
         <!-- 2.B CSOPORTOK NÉZET -->
         <div id="viewGroupsContainer" class="card-box" style="padding:0; overflow:hidden; display:none;">
-            <div style="padding:10px 14px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
-                <input type="text" id="groupGlobalSearch" placeholder="🔍 Keresés csoportnévre, leírásra, DN útvonalra..." style="padding:6px 12px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; width:360px;" oninput="filterAndSortGroups()">
+            <div style="padding:10px 14px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <input type="search" id="groupGlobalSearch" autocomplete="off" placeholder="🔍 Keresés a csoport nevében vagy leírásában..." style="padding:7px 12px; font-size:12.5px; border:1px solid #cbd5e1; border-radius:6px; width:min(480px, 100%);" oninput="filterAndSortGroups()">
                 <div id="groupPaginationTop"></div>
             </div>
-            <table>
+            <div class="table-scroll-mirror" data-table-scroll="groups" aria-label="Csoporttábla felső vízszintes görgetősáv">
+                <div></div>
+            </div>
+            <div class="data-table-scroll" data-table-scroll="groups">
+            <table id="groupsDataTable" class="resizable-data-table">
+                <colgroup>
+                    <col><col><col><col><col><col>
+                </colgroup>
                 <thead>
                     <tr>
-                        <th style="width:260px; cursor:pointer;" onclick="sortGroupsBy('sam_account_name')">Csoport Neve <span id="g_sort_sam_account_name">▲</span></th>
-                        <th style="width:150px; cursor:pointer;" onclick="sortGroupsBy('group_scope')">Típus &amp; Scope <span id="g_sort_group_scope">⇅</span></th>
-                        <th style="width:240px; cursor:pointer;" onclick="sortGroupsBy('description')">Leírás <span id="g_sort_description">⇅</span></th>
-                        <th style="cursor:pointer;" onclick="sortGroupsBy('dn')">AD Distinguished Name (DN) <span id="g_sort_dn">⇅</span></th>
-                        <th style="text-align:right; width:110px;">Tagok</th>
+                        <th style="width:24%; cursor:pointer; user-select:none;" onclick="sortGroupsBy('sam_account_name')">Csoport neve <span id="g_sort_sam_account_name">▲</span></th>
+                        <th style="width:15%; cursor:pointer; user-select:none;" onclick="sortGroupsBy('when_created')">Létrehozás dátuma <span id="g_sort_when_created">⇅</span></th>
+                        <th style="width:17%; cursor:pointer; user-select:none;" onclick="sortGroupsBy('group_type')">Csoport típusa <span id="g_sort_group_type">⇅</span></th>
+                        <th style="width:10%; cursor:pointer; user-select:none;" onclick="sortGroupsBy('members_count')">Tagok száma <span id="g_sort_members_count">⇅</span></th>
+                        <th style="cursor:pointer; user-select:none;" onclick="sortGroupsBy('description')">Leírás <span id="g_sort_description">⇅</span></th>
+                        <th style="text-align:right; width:120px;">Művelet</th>
                     </tr>
                 </thead>
                 <tbody id="groupsTableBody">
-                    <tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8;">Csoportok betöltése...</td></tr>
+                    <tr><td colspan="6" style="text-align:center; padding:20px; color:#94a3b8;">Csoportok betöltése...</td></tr>
                 </tbody>
             </table>
+            </div>
+            <div class="table-layout-footer">
+                <span>Az oszlopszélesség a fejléc jobb szélének húzásával állítható; a beállítás helyben mentődik. <span data-table-layout-status></span></span>
+                <button class="btn" type="button" onclick="resetDataTableWidths('groups')">Alapértelmezett szélességek</button>
+            </div>
+            <div class="table-scroll-mirror table-scroll-mirror-bottom" data-table-scroll="groups" aria-label="Csoporttábla alsó vízszintes görgetősáv">
+                <div></div>
+            </div>
             <div id="groupPaginationBottom" style="padding:8px 14px; border-top:1px solid #e2e8f0; background:#f8fafc;"></div>
         </div>
     </div>
@@ -1165,7 +1204,7 @@
                         <h3 style="margin: 0; font-size: 17px; color: #059669; font-weight: 700; display: flex; align-items: center; gap: 8px;">
                             <span>💾</span> Git &amp; GitHub Integráció
                         </h3>
-                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Verziókövetés, távoli tároló és automatikus címkézés</div>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">A következő verziót a távoli címkékből számolja, és a beállított kiadási ágra tölti fel. A main ág védett.</div>
                     </div>
                     <span style="background: #ecfdf5; color: #047857; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700;">GIT / PAT</span>
                 </div>
@@ -1174,7 +1213,7 @@
 
                 <div style="margin-bottom: 14px;">
                     <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Repository URL:</label>
-                    <input type="text" id="cfg_git_repo" placeholder="https://github.com/tspcit/ad-tracker.git" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    <input type="text" id="cfg_git_repo" placeholder="https://github.com/ottandras-cmyk/TSPC_AD.git" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
                 </div>
 
                 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 16px;">
@@ -1187,7 +1226,7 @@
                     </div>
                     <div>
                         <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Ág (Branch):</label>
-                        <input type="text" id="cfg_git_branch" placeholder="main" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                        <input type="text" id="cfg_git_branch" placeholder="copilot/ad-tracker-v1.27-20261030" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
                     </div>
                 </div>
 
@@ -1389,9 +1428,9 @@ Készen áll a parancsok és tesztek fogadására...
                 setChk('cfg_tg_notify_audit', tg.notify_audit !== false);
 
                 // Git Kártya
-                setVal('cfg_git_repo', gh.repo_url || 'https://github.com/tspcit/ad-tracker.git');
+                setVal('cfg_git_repo', gh.repo_url || 'https://github.com/ottandras-cmyk/TSPC_AD.git');
                 setVal('cfg_git_token', gh.token || '');
-                setVal('cfg_git_branch', gh.branch || 'main');
+                setVal('cfg_git_branch', gh.branch || 'copilot/ad-tracker-v1.27-20261030');
                 setVal('cfg_sp_tenant', sp.tenant_id || '');
                 setVal('cfg_sp_client', sp.client_id || '');
                 setVal('cfg_sp_site_url', sp.site_url || 'https://tspckft.sharepoint.com/sites/TSPCIT');
@@ -1575,7 +1614,7 @@ Készen áll a parancsok és tesztek fogadására...
                 github: {
                     repo_url: document.getElementById('cfg_git_repo')?.value || '',
                     token: document.getElementById('cfg_git_token')?.value || '',
-                    branch: document.getElementById('cfg_git_branch')?.value || 'main'
+                    branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
                 }
             };
             try {
@@ -1716,7 +1755,7 @@ $ ' + commandToRun + '
                 // 3. Git
                 setVal('cfg_git_repo', gh.repo_url || '');
                 setVal('cfg_git_token', gh.token || '');
-                setVal('cfg_git_branch', gh.branch || 'main');
+                setVal('cfg_git_branch', gh.branch || 'copilot/ad-tracker-v1.27-20261030');
 
             } catch(err) {
                 console.error('Hiba a beállítások betöltésekor:', err);
@@ -1851,7 +1890,7 @@ $ ' + commandToRun + '
                 github: {
                     repo_url: document.getElementById('cfg_git_repo')?.value || '',
                     token: document.getElementById('cfg_git_token')?.value || '',
-                    branch: document.getElementById('cfg_git_branch')?.value || 'main'
+                    branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
                 }
             };
             try {
@@ -2170,7 +2209,7 @@ $ ' + commandToRun + '
     </div>
 
     <!-- CORE JAVASCRIPT MOTOR -->
-    <script src="/static/js/ui-core.js?v=2026_MODELS_ORM_INTEGRATED_V1"></script>
+    <script src="/static/js/ui-core.js?v=20261030_RESIZABLE_TABLES_V1"></script>
     <script src="/static/js/sharepoint-developer.js"></script>
 <script id="settings-cards-runtime-script">
 
@@ -2231,9 +2270,9 @@ window.loadUnifiedSettings = async function() {
         setChk('cfg_tg_notify_hd', tg.notify_helpdesk !== false);
         setChk('cfg_tg_notify_audit', tg.notify_audit !== false);
 
-        setVal('cfg_git_repo', gh.repo_url || 'https://github.com/tspcit/ad-tracker.git');
+        setVal('cfg_git_repo', gh.repo_url || 'https://github.com/ottandras-cmyk/TSPC_AD.git');
         setVal('cfg_git_token', gh.token || '');
-        setVal('cfg_git_branch', gh.branch || 'main');
+        setVal('cfg_git_branch', gh.branch || 'copilot/ad-tracker-v1.27-20261030');
         setVal('cfg_sp_tenant', sp.tenant_id || '');
         setVal('cfg_sp_client', sp.client_id || '');
         setVal('cfg_sp_site_url', sp.site_url || 'https://tspckft.sharepoint.com/sites/TSPCIT');
@@ -2513,7 +2552,7 @@ window.saveGitCard = async function() {
         github: {
             repo_url: document.getElementById('cfg_git_repo')?.value || '',
             token: document.getElementById('cfg_git_token')?.value || '',
-            branch: document.getElementById('cfg_git_branch')?.value || 'main'
+            branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
         }
     };
     try {
@@ -2540,7 +2579,8 @@ window.testGitCard = async function(isSilent) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 repo_url: document.getElementById('cfg_git_repo')?.value || '',
-                token: document.getElementById('cfg_git_token')?.value || ''
+                token: document.getElementById('cfg_git_token')?.value || '',
+                branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
             })
         });
         var d = await res.json();
@@ -2568,7 +2608,7 @@ window.pushGitCard = async function() {
     var btn = document.getElementById('btn_push_git');
     var repoUrl = document.getElementById('cfg_git_repo')?.value || '';
     var token = document.getElementById('cfg_git_token')?.value || '';
-    var branch = document.getElementById('cfg_git_branch')?.value || 'main';
+    var branch = document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030';
     var comment = document.getElementById('cfg_git_comment')?.value || '';
 
     if (!token) {

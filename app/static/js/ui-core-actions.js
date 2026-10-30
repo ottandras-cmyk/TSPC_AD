@@ -57,7 +57,7 @@ window.pushGitCard = async function() {
     var btn = document.getElementById('btn_push_git');
     var repoUrl = document.getElementById('cfg_git_repo')?.value || '';
     var token = document.getElementById('cfg_git_token')?.value || '';
-    var branch = document.getElementById('cfg_git_branch')?.value || 'main';
+    var branch = document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030';
 
     if (!token) {
         window.showCardStatus('status_git_card', '❌ Kérjük írja be a Personal Access Token-t (PAT) a push indítása előtt!', false);

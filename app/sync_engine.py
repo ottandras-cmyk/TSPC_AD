@@ -1,6 +1,7 @@
 import re
 import uuid
 from datetime import datetime, timezone, timedelta
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 from ldap3 import Server, Connection, ALL, SUBTREE
 import models
@@ -63,6 +64,19 @@ def get_attr(entry, name, default=None):
     except Exception: pass
     return default
 
+def get_attr_values(entry, name):
+    try:
+        if name not in entry:
+            return []
+        values = entry[name].values
+        if values is None:
+            return []
+        if isinstance(values, (list, tuple, set)):
+            return list(values)
+        return [values]
+    except Exception:
+        return []
+
 def get_guid(entry):
     try:
         val = entry['objectGUID'].raw_values[0]
@@ -91,10 +105,11 @@ def run_ad_sync(db: Session) -> dict:
     changes_count = 0
 
     # 1. CSOPORTOK
-    group_attrs = ['objectGUID', 'sAMAccountName', 'distinguishedName', 'description', 'groupType', 'objectSid', 'whenCreated', 'whenChanged']
+    group_attrs = ['objectGUID', 'sAMAccountName', 'distinguishedName', 'description', 'groupType', 'objectSid', 'whenCreated', 'whenChanged', 'member']
     conn.search(search_base=search_base, search_filter='(&(objectCategory=group)(objectClass=group))', search_scope=SUBTREE, attributes=group_attrs)
     
     db_groups = {g.sam_account_name.lower(): g for g in db.query(models.ADGroup).all()}
+    nested_member_dns_by_sam = {}
     for entry in conn.entries:
         sam = str(get_attr(entry, 'sAMAccountName', '')).strip()
         if not sam: continue
@@ -105,6 +120,11 @@ def run_ad_sync(db: Session) -> dict:
         grp_type_str = "Biztonsági Csoport" if is_security else "Terjesztési Lista"
 
         dn = str(get_attr(entry, 'distinguishedName', ''))
+        nested_member_dns_by_sam[sam_key] = {
+            str(member_dn).strip().casefold()
+            for member_dn in get_attr_values(entry, 'member')
+            if member_dn
+        }
         desc = str(get_attr(entry, 'description') or '').strip()
         sid = str(get_attr(entry, 'objectSid') or '')
         w_created = parse_ad_datetime(get_attr(entry, 'whenCreated'))
@@ -155,6 +175,43 @@ def run_ad_sync(db: Session) -> dict:
             g.source_type = "AD_SYNC"
             g.source_ref = "LIVE_AD"
             g.last_synced_at = now_utc
+
+    groups_by_dn = {
+        group.distinguished_name.strip().casefold(): group
+        for group in db_groups.values()
+        if group.distinguished_name
+    }
+    desired_group_links = set()
+    for parent_sam, member_dns in nested_member_dns_by_sam.items():
+        parent_group = db_groups.get(parent_sam)
+        if parent_group is None:
+            continue
+        for member_dn in member_dns:
+            member_group = groups_by_dn.get(member_dn)
+            if member_group is not None and member_group.object_guid != parent_group.object_guid:
+                desired_group_links.add((parent_group.object_guid, member_group.object_guid))
+
+    group_membership_table = models.group_group_memberships
+    existing_group_links = {
+        (row.parent_group_guid, row.member_group_guid)
+        for row in db.execute(select(
+            group_membership_table.c.parent_group_guid,
+            group_membership_table.c.member_group_guid,
+        )).all()
+    }
+    removed_group_links = existing_group_links - desired_group_links
+    added_group_links = desired_group_links - existing_group_links
+    for parent_guid, member_guid in removed_group_links:
+        db.execute(delete(group_membership_table).where(
+            group_membership_table.c.parent_group_guid == parent_guid,
+            group_membership_table.c.member_group_guid == member_guid,
+        ))
+    for parent_guid, member_guid in added_group_links:
+        db.execute(insert(group_membership_table).values(
+            parent_group_guid=parent_guid,
+            member_group_guid=member_guid,
+        ))
+    changes_count += len(removed_group_links) + len(added_group_links)
 
     # 2. FELHASZNÁLÓK
     user_attrs = [
@@ -369,4 +426,8 @@ def run_ad_sync(db: Session) -> dict:
 
     db.commit()
     conn.unbind()
-    return {"detektalt_valtozasok": changes_count}
+    return {
+        "detektalt_valtozasok": changes_count,
+        "hozzaadott_csoporttagsagok": len(added_group_links),
+        "eltavolitott_csoporttagsagok": len(removed_group_links),
+    }

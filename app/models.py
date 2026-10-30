@@ -17,6 +17,14 @@ group_memberships = Table(
     Column('assigned_at', DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 )
 
+group_group_memberships = Table(
+    'ad_group_group_members',
+    Base.metadata,
+    Column('parent_group_guid', UUID(as_uuid=True), ForeignKey('ad_groups.object_guid', ondelete='CASCADE'), primary_key=True),
+    Column('member_group_guid', UUID(as_uuid=True), ForeignKey('ad_groups.object_guid', ondelete='CASCADE'), primary_key=True),
+    Column('assigned_at', DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+)
+
 class ADUser(Base):
     __tablename__ = 'ad_users'
     object_guid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

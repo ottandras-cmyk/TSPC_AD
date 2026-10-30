@@ -55,9 +55,9 @@ window.loadUnifiedSettings = async function() {
         setChk('cfg_tg_notify_hd', tg.notify_helpdesk !== false);
         setChk('cfg_tg_notify_audit', tg.notify_audit !== false);
 
-        setVal('cfg_git_repo', gh.repo_url || 'https://github.com/tspcit/ad-tracker.git');
+        setVal('cfg_git_repo', gh.repo_url || 'https://github.com/ottandras-cmyk/TSPC_AD.git');
         setVal('cfg_git_token', gh.token || '');
-        setVal('cfg_git_branch', gh.branch || 'main');
+        setVal('cfg_git_branch', gh.branch || 'copilot/ad-tracker-v1.27-20261030');
 
         if (window.testGitCard) {
             window.testGitCard(true);
@@ -262,7 +262,7 @@ window.saveGitCard = async function() {
         github: {
             repo_url: document.getElementById('cfg_git_repo')?.value || '',
             token: document.getElementById('cfg_git_token')?.value || '',
-            branch: document.getElementById('cfg_git_branch')?.value || 'main'
+            branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
         }
     };
     try {
@@ -289,7 +289,8 @@ window.testGitCard = async function(isSilent) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 repo_url: document.getElementById('cfg_git_repo')?.value || '',
-                token: document.getElementById('cfg_git_token')?.value || ''
+                token: document.getElementById('cfg_git_token')?.value || '',
+                branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
             })
         });
         var d = await res.json();
@@ -317,7 +318,7 @@ window.pushGitCard = async function() {
     var btn = document.getElementById('btn_push_git');
     var repoUrl = document.getElementById('cfg_git_repo')?.value || '';
     var token = document.getElementById('cfg_git_token')?.value || '';
-    var branch = document.getElementById('cfg_git_branch')?.value || 'main';
+    var branch = document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030';
     var comment = document.getElementById('cfg_git_comment')?.value || '';
 
     if (!token) {

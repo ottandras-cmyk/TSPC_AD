@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from io import BytesIO
 from database import get_db
+from config_manager import load_local_settings, save_local_settings
 import models
 from services.sharepoint_service import (
     SharePointIntegrationError,
@@ -17,9 +18,24 @@ from services.sharepoint_service import (
     sync_sharepoint_lists_to_database,
     test_sharepoint_connection,
 )
+from services.github_release_service import (
+    DEFAULT_RELEASE_BRANCH,
+    DEFAULT_REPOSITORY_URL,
+    GitHubReleaseError,
+    inspect_remote_release,
+    push_release,
+)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 logger = logging.getLogger(__name__)
+
+LEGACY_INTEGRATION_SETTING_KEYS = {
+    "EP_URL", "EP_API_KEY", "EP_PROJECT_ID", "EP_SYNC_INTERVAL_MINUTES",
+    "AD_SERVER", "AD_BASE_DN", "AD_SEARCH_BASE", "AD_BIND_USER", "AD_USER",
+    "AD_BIND_PASSWORD", "AD_PASSWORD", "AD_SYNC_INTERVAL_MINUTES",
+    "TG_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "TG_CHAT_ID", "GITHUB_TOKEN",
+    "GH_TOKEN", "GH_REPO", "GH_BRANCH", "SP_CLIENT_SECRET",
+}
 
 class SharePointImageSyncRequest(BaseModel):
     username: str = Field(min_length=1, max_length=256)
@@ -27,27 +43,7 @@ class SharePointImageSyncRequest(BaseModel):
 
 
 def get_all_settings():
-    raw_data = {}
-    for sf in ["app/config/settings.json", "config/settings.json", "app/settings.json", "settings.json"]:
-        if os.path.exists(sf):
-            try:
-                with open(sf, "r", encoding="utf-8", errors="ignore") as f:
-                    content = json.load(f)
-                    if isinstance(content, dict) and len(content) > 0:
-                        raw_data.update(content)
-                        break
-            except Exception: pass
-
-    for ef in [".env", "app/.env"]:
-        if os.path.exists(ef):
-            try:
-                with open(ef, "r", encoding="utf-8", errors="ignore") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#") and "=" in line:
-                            k, v = line.split("=", 1)
-                            raw_data[k.strip()] = v.strip().strip('"').strip("'")
-            except Exception: pass
+    raw_data = load_local_settings()
 
     norm = {
         "status": "SUCCESS",
@@ -71,9 +67,9 @@ def get_all_settings():
             "notify_audit": True
         },
         "github": {
-            "repo_url": "https://github.com/tspcit/ad-tracker.git",
+            "repo_url": DEFAULT_REPOSITORY_URL,
             "token": "",
-            "branch": "main",
+            "branch": DEFAULT_RELEASE_BRANCH,
             "auto_tag": True
         },
         "sharepoint": {
@@ -142,13 +138,26 @@ def get_all_settings():
                     norm["github"]["repo_url"] = val
 
     scan_dict(raw_data)
+    if norm["github"]["repo_url"].rstrip("/").removesuffix(".git").lower() == "https://github.com/tspcit/ad-tracker":
+        norm["github"]["repo_url"] = DEFAULT_REPOSITORY_URL
+        if norm["github"]["branch"] == "main":
+            norm["github"]["branch"] = DEFAULT_RELEASE_BRANCH
     norm["GITHUB_TOKEN"] = norm["github"]["token"]
     norm["tab_visibility"] = raw_data.get("tab_visibility", {})
+    canonical = dict(raw_data)
+    for section in ["easyproject", "ad", "telegram", "github", "sharepoint"]:
+        canonical[section] = norm[section]
+    canonical["tab_visibility"] = norm["tab_visibility"]
+    for key in LEGACY_INTEGRATION_SETTING_KEYS:
+        canonical.pop(key, None)
+    if canonical != raw_data and not save_local_settings(canonical):
+        logger.error("Could not normalize legacy integration settings into the local settings file.")
     return norm
 
 @router.get("")
 @router.get("/")
-def get_settings():
+def get_settings(request: Request):
+    _require_settings_user(request)
     settings = get_all_settings()
     sharepoint = dict(settings["sharepoint"])
     sharepoint["secret_configured"] = bool(sharepoint.get("client_secret"))
@@ -175,32 +184,11 @@ def _require_secure_transport(request: Request) -> None:
 
 
 def _save_sharepoint_config(config: dict) -> bool:
-    settings_files = ["app/config/settings.json", "config/settings.json", "app/settings.json", "settings.json"]
-    existing = {}
-    for settings_file in settings_files:
-        if os.path.exists(settings_file):
-            try:
-                with open(settings_file, "r", encoding="utf-8") as source:
-                    loaded = json.load(source)
-                if isinstance(loaded, dict):
-                    existing = loaded
-                    break
-            except Exception:
-                continue
-
-    existing["sharepoint"] = config
-    saved = False
-    for settings_file in settings_files:
-        try:
-            directory = os.path.dirname(settings_file)
-            if directory:
-                os.makedirs(directory, exist_ok=True)
-            with open(settings_file, "w", encoding="utf-8") as destination:
-                json.dump(existing, destination, indent=2, ensure_ascii=False)
-            saved = True
-        except OSError:
-            continue
-    return saved
+    settings = load_local_settings()
+    settings["sharepoint"] = config
+    for key in LEGACY_INTEGRATION_SETTING_KEYS:
+        settings.pop(key, None)
+    return save_local_settings(settings)
 
 
 def _sharepoint_request_config(body: dict) -> dict:
@@ -625,63 +613,31 @@ def download_sharepoint_list(request: Request, list_name: str):
 
 @router.post("/save")
 async def save_settings(req: Request):
+    _require_settings_user(req)
     try: body = await req.json()
     except Exception: body = {}
 
     current = get_all_settings()
-    for sec in ["easyproject", "ad", "telegram", "github"]:
+    for sec in ["easyproject", "ad", "telegram", "github", "sharepoint"]:
         if sec in body and isinstance(body[sec], dict):
             current[sec].update(body[sec])
 
-    cfg_file = "app/config/settings.json" if os.path.exists("app/config/settings.json") else "app/settings.json"
-    existing = {}
-    if os.path.exists(cfg_file):
-        try:
-            with open(cfg_file, "r", encoding="utf-8") as f:
-                existing = json.load(f)
-        except Exception: pass
+    existing = load_local_settings()
+    for section in ["easyproject", "ad", "telegram", "github", "sharepoint"]:
+        existing[section] = current[section]
 
-    existing["EP_URL"] = current["easyproject"]["url"]
-    existing["EP_API_KEY"] = current["easyproject"]["api_key"]
-    existing["EP_PROJECT_ID"] = current["easyproject"]["project_id"]
-    existing["EP_SYNC_INTERVAL_MINUTES"] = current["easyproject"]["sync_interval_minutes"]
+    for key in LEGACY_INTEGRATION_SETTING_KEYS:
+        existing.pop(key, None)
 
-    existing["AD_SERVER"] = current["ad"]["server"]
-    existing["AD_BASE_DN"] = current["ad"]["base_dn"]
-    existing["AD_BIND_USER"] = current["ad"]["bind_user"]
-    existing["AD_BIND_PASSWORD"] = current["ad"]["bind_password"]
-    existing["AD_SYNC_INTERVAL_MINUTES"] = current["ad"]["sync_interval_minutes"]
-
-    existing["TG_BOT_TOKEN"] = current["telegram"]["bot_token"]
-    existing["TG_CHAT_ID"] = current["telegram"]["chat_id"]
-    existing["GITHUB_TOKEN"] = current["github"]["token"]
-    
-    existing["easyproject"] = current["easyproject"]
-    existing["ad"] = current["ad"]
-    existing["telegram"] = current["telegram"]
-    existing["github"] = current["github"]
     if "tab_visibility" in body:
         existing["tab_visibility"] = body["tab_visibility"]
         current["tab_visibility"] = body["tab_visibility"]
 
-    for sf in ["app/config/settings.json", "config/settings.json", "app/settings.json", "settings.json"]:
-        try:
-            dname = os.path.dirname(sf)
-            if dname: os.makedirs(dname, exist_ok=True)
-            with open(sf, "w", encoding="utf-8") as f:
-                json.dump(existing, f, indent=2, ensure_ascii=False)
-        except Exception: pass
-
-    try:
-        env_lines = []
-        if os.path.exists(".env"):
-            with open(".env", "r", encoding="utf-8") as ef:
-                env_lines = [l for l in ef.read().splitlines() if not l.startswith("GITHUB_TOKEN")]
-        if current["github"]["token"]:
-            env_lines.append(f"GITHUB_TOKEN={current['github']['token']}")
-        with open(".env", "w", encoding="utf-8") as ef:
-            ef.write("\n".join(env_lines) + "\n")
-    except Exception: pass
+    if not save_local_settings(existing):
+        return JSONResponse(
+            status_code=500,
+            content={"status": "ERROR", "message": "A helyi beállításfájl mentése nem sikerült."},
+        )
 
     response_settings = dict(current)
     sharepoint = dict(response_settings.get("sharepoint", {}))
@@ -783,70 +739,31 @@ async def test_git(req: Request):
     except Exception: body = {}
 
     cfg = get_all_settings()
-    repo_url = (body.get("repo_url") or cfg["github"].get("repo_url") or "https://github.com/tspcit/ad-tracker.git").strip()
+    repo_url = (body.get("repo_url") or cfg["github"].get("repo_url") or DEFAULT_REPOSITORY_URL).strip()
     token = (body.get("token") or cfg["github"].get("token") or "").strip()
+    branch = (body.get("branch") or cfg["github"].get("branch") or DEFAULT_RELEASE_BRANCH).strip()
+    if repo_url.rstrip("/").removesuffix(".git").lower() == "https://github.com/tspcit/ad-tracker":
+        repo_url = DEFAULT_REPOSITORY_URL
+        if branch == "main":
+            branch = DEFAULT_RELEASE_BRANCH
 
-    tag = subprocess.getoutput("git describe --tags --abbrev=0 2>/dev/null || cat app/git_version.txt 2>/dev/null || echo 'v1.10'").strip()
-    log = subprocess.getoutput('git log -n 1 --pretty=format:"%h|%cd|%s" --date=format:"%Y-%m-%d %H:%M" 2>/dev/null').strip()
-    parts = log.split("|") if log else ["-", "-", "-"]
+    try:
+        remote = inspect_remote_release(repo_url, token, branch)
+    except GitHubReleaseError as error:
+        return JSONResponse(status_code=502, content={"status": "ERROR", "message": str(error)})
 
     info = {
         "status": "SUCCESS",
-        "version": tag or "v1.10",
-        "name": parts[2] if len(parts) > 2 else "Kiadás",
-        "date": parts[1] if len(parts) > 1 else "-",
-        "commit": parts[0] if parts[0] else "-",
-        "source": "Helyi Git tároló"
+        "version": remote["latest_version"],
+        "name": f"Kiadási ág: {branch}",
+        "date": "-",
+        "commit": remote["branch_commit"][:7],
+        "source": f"GitHub ({remote['repository']})",
+        "message": (
+            f"GitHub kapcsolat sikeres! Legújabb címke: {remote['latest_version']} | "
+            f"ág: {branch} | commit: {remote['branch_commit'][:7]}"
+        ),
     }
-
-    if repo_url and "github.com" in repo_url:
-        m = re.search(r'github\.com[/:]([^/]+)/([^/\.]+)', repo_url)
-        if m:
-            owner, repo = m.group(1), m.group(2)
-            headers = {"User-Agent": "ADTracker-App", "Accept": "application/vnd.github+json"}
-            if token and len(token) > 10 and not token.startswith("•••"):
-                headers["Authorization"] = f"token {token}"
-            
-            ctx = ssl._create_unverified_context()
-
-            try:
-                rq = urllib.request.Request(f"https://api.github.com/repos/{owner}/{repo}/releases/latest", headers=headers)
-                with urllib.request.urlopen(rq, timeout=5, context=ctx) as r:
-                    rel = json.loads(r.read().decode())
-                    if rel.get("tag_name"):
-                        info["version"] = rel.get("tag_name")
-                        info["name"] = rel.get("name") or rel.get("tag_name")
-                        info["date"] = (rel.get("published_at") or "")[:16].replace("T", " ")
-                        info["source"] = f"GitHub Releases ({owner}/{repo})"
-            except Exception: pass
-
-            if info["source"] == "Helyi Git tároló":
-                try:
-                    rq = urllib.request.Request(f"https://api.github.com/repos/{owner}/{repo}/tags?per_page=1", headers=headers)
-                    with urllib.request.urlopen(rq, timeout=5, context=ctx) as r:
-                        tags = json.loads(r.read().decode())
-                        if tags and isinstance(tags, list):
-                            info["version"] = tags[0].get("name", info["version"])
-                            info["commit"] = (tags[0].get("commit", {}).get("sha") or "")[:7] or info["commit"]
-                            info["source"] = f"GitHub Tags ({owner}/{repo})"
-                except Exception: pass
-
-            try:
-                rq = urllib.request.Request(f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=1", headers=headers)
-                with urllib.request.urlopen(rq, timeout=5, context=ctx) as r:
-                    commits = json.loads(r.read().decode())
-                    if commits and isinstance(commits, list):
-                        c0 = commits[0]
-                        info["commit"] = (c0.get("sha") or "")[:7] or info["commit"]
-                        c_msg = c0.get("commit", {}).get("message", "").split("\n")[0]
-                        if info["name"] in ["Kiadás", "-", ""]: info["name"] = c_msg
-                        c_date = (c0.get("commit", {}).get("committer", {}).get("date") or "")[:16].replace("T", " ")
-                        if info["date"] in ["-", ""]: info["date"] = c_date
-                        if "Releases" not in info["source"]:
-                            info["source"] = f"GitHub API ({owner}/{repo})"
-            except Exception: pass
-
-    info["message"] = f"GitHub kapcsolat sikeres! Verzió: {info['version']} ({info['name']}) | Dátum: {info['date']}"
     return JSONResponse(status_code=200, content=info)
 
 def get_db_counts():
@@ -970,13 +887,14 @@ def sync_ep_now():
 
 @router.post("/github-push")
 async def github_push(req: Request):
+    _require_settings_user(req)
     try: body = await req.json()
     except Exception: body = {}
 
     cfg = get_all_settings()
-    repo_url = (body.get("repo_url") or cfg["github"].get("repo_url") or "https://github.com/tspcit/ad-tracker.git").strip()
+    repo_url = (body.get("repo_url") or cfg["github"].get("repo_url") or DEFAULT_REPOSITORY_URL).strip()
     token = (body.get("token") or cfg["github"].get("token") or "").strip()
-    branch = (body.get("branch") or cfg["github"].get("branch") or "main").strip()
+    branch = (body.get("branch") or cfg["github"].get("branch") or DEFAULT_RELEASE_BRANCH).strip()
     user_comment = (body.get("comment") or "").strip()
 
     if not token or token.startswith("•••") or len(token) < 10:
@@ -985,69 +903,28 @@ async def github_push(req: Request):
             "message": "Hiányzik vagy érvénytelen a GitHub Personal Access Token (PAT)! Kérjük adja meg és mentse el a kártyán a push előtt."
         })
 
-    subprocess.run("git config --global --add safe.directory '*'", shell=True)
-    subprocess.run("git config --global user.name 'AD Tracker System'", shell=True)
-    subprocess.run("git config --global user.email 'adtracker@tspc.hu'", shell=True)
-
-    curr_branch = subprocess.getoutput("git branch --show-current 2>/dev/null").strip()
-    if not curr_branch:
-        subprocess.run(f"git checkout -b {branch} 2>/dev/null || true", shell=True)
-    elif curr_branch != branch:
-        subprocess.run(f"git branch -M {branch} 2>/dev/null || true", shell=True)
-
-    tag_out = subprocess.getoutput("git tag -l 'v*' 2>/dev/null | sort -V | tail -n 1").strip()
-    if not tag_out and os.path.exists("app/git_version.txt"):
-        try:
-            with open("app/git_version.txt") as f: tag_out = f.read().strip()
-        except: pass
-    if not tag_out: tag_out = "v1.10"
-
-    m = re.match(r'v?(\d+)\.(\d+)', tag_out)
-    if m:
-        major = int(m.group(1))
-        minor = int(m.group(2)) + 1
-        new_tag = f"v{major}.{minor:02d}"
-    else:
-        new_tag = "v1.11"
-
-    ts = time.strftime("%Y-%m-%d %H:%M")
-    desc = user_comment if user_comment else f"Release {new_tag} frissítés"
-    commit_msg = f"{new_tag}: {desc} ({ts})"
+    if repo_url.rstrip("/").removesuffix(".git").lower() == "https://github.com/tspcit/ad-tracker":
+        repo_url = DEFAULT_REPOSITORY_URL
+        if branch == "main":
+            branch = DEFAULT_RELEASE_BRANCH
 
     try:
-        os.makedirs("app", exist_ok=True)
-        with open("app/git_version.txt", "w", encoding="utf-8") as f:
-            f.write(new_tag)
-    except: pass
-
-    subprocess.run("git add -A 2>/dev/null", shell=True)
-    subprocess.run(f'git commit -m "{commit_msg}" --allow-empty 2>/dev/null', shell=True)
-    subprocess.run(f'git tag -a "{new_tag}" -m "{commit_msg}" -f 2>/dev/null', shell=True)
-
-    commit_sha = subprocess.getoutput("git rev-parse --short HEAD 2>/dev/null").strip() or "-"
-
-    clean_repo = re.sub(r'^https?://(?:[^@]+@)?github\.com/', 'github.com/', repo_url).strip().rstrip('/')
-    if not clean_repo.endswith('.git'): clean_repo += '.git'
-    auth_remote = f"https://x-access-token:{token}@{clean_repo}"
-
-    p = subprocess.run(f'git push "{auth_remote}" HEAD:{branch} --tags 2>&1', shell=True, capture_output=True, text=True, timeout=45)
-    
-    if p.returncode == 0:
+        result = push_release(repo_url, token, branch, user_comment)
+        ts = time.strftime("%Y-%m-%d %H:%M")
         return JSONResponse(status_code=200, content={
             "status": "SUCCESS",
-            "message": f"Új verzió ({new_tag}) sikeresen felpusholva a GitHub ({branch}) ágra!",
-            "version": new_tag,
-            "name": desc,
+            "message": result["message"],
+            "version": result["version"],
+            "name": user_comment or f"Release {result['version']}",
             "date": ts,
-            "commit": commit_sha
+            "commit": result["commit_sha"][:7],
+            "branch": result["branch"],
+            "repository": result["repository"],
+            "previous_version": result["previous_version"],
         })
-    else:
-        err = p.stderr or p.stdout or "Ismeretlen push hiba"
-        err_clean = err.replace(token, "***").strip()
-        return JSONResponse(status_code=500, content={
-            "status": "ERROR",
-            "message": f"GitHub Push sikertelen: {err_clean}"
-        })
+    except GitHubReleaseError as error:
+        logger.warning("GitHub release push failed: %s", error)
+        return JSONResponse(status_code=502, content={"status": "ERROR", "message": str(error)})
 
 @router.post("/debug-exec")
 async def debug_exec(req: Request):

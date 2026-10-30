@@ -1,0 +1,40 @@
+[
+  {
+    "key": "local_1793089894006",
+    "time": "2026-10-27 08:31:34",
+    "direction": "KIMENŐ (TESZT)",
+    "chat_id": "229087988",
+    "text": "Sikeres tesztüzenet",
+    "status": "SIKERES",
+    "details": "OK 200"
+  },
+  {
+    "key": "local_1793043478280",
+    "time": "2026-10-26 19:37:58",
+    "direction": "KIMENŐ (TESZT)",
+    "chat_id": "229087988",
+    "text": "Sikeres tesztüzenet",
+    "status": "SIKERES",
+    "details": "OK 200"
+  },
+  {
+    "key": "tg_upd_681397953",
+    "time": "2026-10-26 19:32:00",
+    "direction": "BEJÖVŐ (TELEGRAM)",
+    "chat_id": "229087988",
+    "sender": "Ott Andras",
+    "text": "Uzenet",
+    "status": "FOGADVA",
+    "details": "Feladó: Ott Andras"
+  },
+  {
+    "key": "tg_upd_681397952",
+    "time": "2026-10-26 19:26:43",
+    "direction": "BEJÖVŐ (TELEGRAM)",
+    "chat_id": "229087988",
+    "sender": "Ott Andras",
+    "text": "/start",
+    "status": "FOGADVA",
+    "details": "Feladó: Ott Andras"
+  }
+]

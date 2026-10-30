@@ -1,0 +1,99 @@
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session, joinedload
+from database import get_db
+from auth import COOKIE_NAME, verify_session_token
+import models
+
+router = APIRouter(prefix="/api", tags=["users"])
+
+def safe_get_user(request: Request):
+    try:
+        token = request.cookies.get(COOKIE_NAME)
+        if token:
+            user, _ = verify_session_token(token)
+            return user
+    except Exception: pass
+    return "tadmin"
+
+@router.get("/users")
+@router.get("/users/list")
+def get_all_users(request: Request, db: Session = Depends(get_db)):
+    db_users = (
+        db.query(models.ADUser)
+        .filter(
+            ~models.ADUser.sam_account_name.contains('@'),
+            ~models.ADUser.mail.startswith('S-1-5-'),
+            ~models.ADUser.sam_account_name.contains(' ')
+        )
+        .options(joinedload(models.ADUser.groups))
+        .order_by(models.ADUser.display_name.asc().nullslast())
+        .all()
+    )
+
+    users_payload = []
+    total_active = 0
+
+    for u in db_users:
+        is_act = bool(u.is_enabled)
+        if is_act: total_active += 1
+
+        grp_names = [g.sam_account_name for g in u.groups if g.sam_account_name]
+
+        users_payload.append({
+            "id": str(u.object_guid) if u.object_guid else "",
+            "guid": str(u.object_guid) if u.object_guid else "",
+            "sam_account_name": u.sam_account_name or "",
+            "display_name": u.display_name or u.sam_account_name or "-",
+            "mail": u.mail or "-",
+            "title": u.title or "-",
+            "department": u.department or "-",
+            "company": u.company or "TSPC",
+            "office": u.office or "-",
+            "telephone_number": u.telephone_number or "-",
+            "mobile": u.mobile or "-",
+            "user_status": u.user_status or ("Aktív normál user" if is_act else "Letiltva"),
+            "is_enabled": is_act,
+            "last_logon": u.last_logon_date.strftime("%Y-%m-%d %H:%M") if u.last_logon_date else "-",
+            "last_logon_date": u.last_logon_date.strftime("%Y-%m-%d %H:%M") if u.last_logon_date else "-",
+            "when_created": u.when_created.strftime("%Y-%m-%d") if u.when_created else "-",
+            "groups": grp_names,
+            "groups_count": len(grp_names)
+        })
+
+    return {
+        "status": "SUCCESS",
+        "total_count": len(users_payload),
+        "total_users": len(users_payload),
+        "active_users": total_active,
+        "disabled_users": len(users_payload) - total_active,
+        "users": users_payload,
+        "data": users_payload
+    }
+
+@router.get("/users/{sam}/history")
+def get_user_history(sam: str, db: Session = Depends(get_db)):
+    logs = db.query(models.ADAuditLog).filter(models.ADAuditLog.entity_name == sam).order_by(models.ADAuditLog.timestamp.desc()).limit(100).all()
+    res = []
+    for l in logs:
+        res.append({
+            "id": l.id,
+            "timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S") if l.timestamp else "-",
+            "change_type": l.change_type or "-",
+            "details": l.details or "-",
+            "source_ref": l.source_ref or "AD"
+        })
+    return {"status": "SUCCESS", "history": res, "data": res}
+
+@router.get("/groups")
+def get_all_groups(db: Session = Depends(get_db)):
+    grps = db.query(models.ADGroup).order_by(models.ADGroup.sam_account_name.asc()).all()
+    res = []
+    for g in grps:
+        res.append({
+            "guid": str(g.object_guid) if g.object_guid else "",
+            "sam_account_name": g.sam_account_name or "",
+            "description": g.description or "-",
+            "group_type": g.group_type or "Security Group",
+            "members_count": len(g.members) if g.members else 0
+        })
+    return {"status": "SUCCESS", "groups": res, "data": res}

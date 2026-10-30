@@ -513,7 +513,7 @@
                         <h3 style="margin: 0; font-size: 17px; color: #059669; font-weight: 700; display: flex; align-items: center; gap: 8px;">
                             <span>💾</span> Git &amp; GitHub Integráció
                         </h3>
-                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Verziókövetés, távoli tároló és automatikus címkézés</div>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 3px;">A következő verziót a távoli címkékből számolja, és a beállított kiadási ágra tölti fel. A main ág védett.</div>
                     </div>
                     <span style="background: #ecfdf5; color: #047857; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700;">GIT / PAT</span>
                 </div>
@@ -522,7 +522,7 @@
 
                 <div style="margin-bottom: 14px;">
                     <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Repository URL:</label>
-                    <input type="text" id="cfg_git_repo" placeholder="https://github.com/tspcit/ad-tracker.git" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                    <input type="text" id="cfg_git_repo" placeholder="https://github.com/ottandras-cmyk/TSPC_AD.git" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
                 </div>
 
                 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 16px;">
@@ -535,7 +535,7 @@
                     </div>
                     <div>
                         <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 5px;">Ág (Branch):</label>
-                        <input type="text" id="cfg_git_branch" placeholder="main" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+                        <input type="text" id="cfg_git_branch" placeholder="copilot/ad-tracker-v1.27-20261030" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
                     </div>
                 </div>
 
@@ -658,9 +658,9 @@ window.loadUnifiedSettings = async function() {
         setChk('cfg_tg_notify_hd', tg.notify_helpdesk !== false);
         setChk('cfg_tg_notify_audit', tg.notify_audit !== false);
 
-        setVal('cfg_git_repo', gh.repo_url || 'https://github.com/tspcit/ad-tracker.git');
+        setVal('cfg_git_repo', gh.repo_url || 'https://github.com/ottandras-cmyk/TSPC_AD.git');
         setVal('cfg_git_token', gh.token || '');
-        setVal('cfg_git_branch', gh.branch || 'main');
+        setVal('cfg_git_branch', gh.branch || 'copilot/ad-tracker-v1.27-20261030');
 
         if (window.testGitCard) {
             window.testGitCard(true);
@@ -865,7 +865,7 @@ window.saveGitCard = async function() {
         github: {
             repo_url: document.getElementById('cfg_git_repo')?.value || '',
             token: document.getElementById('cfg_git_token')?.value || '',
-            branch: document.getElementById('cfg_git_branch')?.value || 'main'
+            branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
         }
     };
     try {
@@ -892,7 +892,8 @@ window.testGitCard = async function(isSilent) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 repo_url: document.getElementById('cfg_git_repo')?.value || '',
-                token: document.getElementById('cfg_git_token')?.value || ''
+                token: document.getElementById('cfg_git_token')?.value || '',
+                branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
             })
         });
         var d = await res.json();
@@ -920,7 +921,7 @@ window.pushGitCard = async function() {
     var btn = document.getElementById('btn_push_git');
     var repoUrl = document.getElementById('cfg_git_repo')?.value || '';
     var token = document.getElementById('cfg_git_token')?.value || '';
-    var branch = document.getElementById('cfg_git_branch')?.value || 'main';
+    var branch = document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030';
     var comment = document.getElementById('cfg_git_comment')?.value || '';
 
     if (!token) {

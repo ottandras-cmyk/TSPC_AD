@@ -1,5 +1,6 @@
 import time
-from datetime import timezone
+from datetime import datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -7,6 +8,50 @@ from database import get_db
 import models
 
 router = APIRouter(tags=["sync"])
+
+def execute_sync_with_log(trigger_type: str, db: Optional[Session] = None):
+    owns_session = db is None
+    if owns_session:
+        from database import SessionLocal
+        db = SessionLocal()
+
+    started_at = datetime.now(timezone.utc)
+    history = models.SyncHistory(
+        started_at=started_at,
+        trigger_type=trigger_type,
+        status="FOLYAMATBAN",
+        changes_detected=0,
+    )
+    db.add(history)
+    db.commit()
+
+    try:
+        from sync_engine import run_ad_sync
+        result = run_ad_sync(db)
+        ended_at = datetime.now(timezone.utc)
+        history.ended_at = ended_at
+        history.completed_at = ended_at.replace(tzinfo=None)
+        history.duration_seconds = int((ended_at - started_at).total_seconds())
+        history.status = "SIKERES"
+        history.changes_detected = int(result.get("detektalt_valtozasok", 0))
+        db.commit()
+        return result
+    except Exception as error:
+        db.rollback()
+        history = db.get(models.SyncHistory, history.id)
+        if history is not None:
+            ended_at = datetime.now(timezone.utc)
+            history.ended_at = ended_at
+            history.completed_at = ended_at.replace(tzinfo=None)
+            history.duration_seconds = int((ended_at - started_at).total_seconds())
+            history.status = "HIBA"
+            history.error_message = str(error)
+            db.commit()
+        raise
+    finally:
+        if owns_session:
+            db.close()
+
 
 def _timestamp_value(value):
     if value is None:
@@ -177,8 +222,7 @@ def get_sync_history_unified(db: Session = Depends(get_db)):
 async def trigger_sync(request: Request, db: Session = Depends(get_db)):
     t_start = time.time()
     try:
-        from sync_engine import run_ad_sync
-        res = run_ad_sync(db, trigger_type="MANUAL")
+        res = execute_sync_with_log("MANUAL", db)
         dur = round(time.time() - t_start, 1)
         return {"status": "SUCCESS", "message": f"Szinkronizáció kész ({dur} mp).", "result": res}
     except Exception as e:

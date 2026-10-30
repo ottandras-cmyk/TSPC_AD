@@ -60,7 +60,10 @@ window.switchTab = function(tabId) {
 
     // 3. Adatbetöltők indítása a megfelelő fül aktiválásakor
     if (shortId === 'audit' && window.loadAuditEvents) loadAuditEvents();
-    else if (shortId === 'users' && window.loadUsersAndGroups) loadUsersAndGroups();
+    else if (shortId === 'users' && window.loadUsersAndGroups) {
+        loadUsersAndGroups();
+        if (window.refreshDataTableLayoutForVisibleTab) window.refreshDataTableLayoutForVisibleTab();
+    }
     else if (shortId === 'easyproject' && window.loadEpTasks) loadEpTasks();
     else if (shortId === 'helpdesk' && window.loadHelpdeskTickets) loadHelpdeskTickets();
     else if (shortId === 'backups' && window.loadBackups) { loadBackups(); loadGitLog(); }
@@ -742,6 +745,7 @@ window.sendTicketToTelegramDirect = async function(ticketId) {
 
 // Automatikus kezdő fül aktiválás induláskor (ha még nincs aktív)
 function initActiveTab() {
+    if (window.initializeDataTableLayouts) window.initializeDataTableLayouts();
     var activePane = document.querySelector('.app-tab-pane.active') || document.querySelector('[id^="pane-"].active');
     if (activePane && activePane.id) {
         switchTab(activePane.id);
@@ -1103,7 +1107,7 @@ window.loadSettings = async function() {
         // 3. Git
         setVal('cfg_git_repo', gh.repo_url || '');
         setVal('cfg_git_token', gh.token || '');
-        setVal('cfg_git_branch', gh.branch || 'main');
+        setVal('cfg_git_branch', gh.branch || 'copilot/ad-tracker-v1.27-20261030');
 
     } catch(err) {
         console.error('Hiba a beállítások betöltésekor:', err);
@@ -1243,7 +1247,7 @@ window.saveGitSettings = async function() {
         github: {
             repo_url: document.getElementById('cfg_git_repo')?.value || '',
             token: document.getElementById('cfg_git_token')?.value || '',
-            branch: document.getElementById('cfg_git_branch')?.value || 'main'
+            branch: document.getElementById('cfg_git_branch')?.value || 'copilot/ad-tracker-v1.27-20261030'
         }
     };
     try {
@@ -1317,32 +1321,352 @@ window.filteredUsersList = [];
 
 // Kezdeti adatbetöltés és szűrők felépítése
 window.loadUsersAndGroups = async function() {
-    try {
-        var res = await fetch('/api/users/all');
-        if (res.ok) {
-            var data = await res.json();
-            window.allUsersMaster = data.users || [];
-            window.allGroupsMaster = data.groups || [];
+    window.groupListState.loading = true;
+    var results = await Promise.allSettled([
+        fetch('/api/users/all'),
+        fetch('/api/groups/all')
+    ]);
 
-            // Statisztikák frissítése
-            var total = allUsersMaster.length;
-            var active = allUsersMaster.filter(function(u) { return u.is_enabled !== false && u.enabled !== false; }).length;
-            var disabled = total - active;
+    if (results[0].status === 'fulfilled' && results[0].value.ok) {
+        var usersData = await results[0].value.json();
+        window.allUsersMaster = usersData.users || [];
 
-            if (document.getElementById('u_kpi_total')) document.getElementById('u_kpi_total').innerText = total + ' fő';
-            if (document.getElementById('u_kpi_active')) document.getElementById('u_kpi_active').innerText = active + ' fő';
-            if (document.getElementById('u_kpi_disabled')) document.getElementById('u_kpi_disabled').innerText = disabled + ' fő';
-            if (document.getElementById('u_badge_cnt')) document.getElementById('u_badge_cnt').innerText = total;
+        var total = window.allUsersMaster.length;
+        var active = window.allUsersMaster.filter(function(u) { return u.is_enabled !== false && u.enabled !== false; }).length;
+        var disabled = total - active;
 
-            // Részleg és Beosztás szűrő legördülők feltöltése darabszámokkal
-            populateUserDropdownFilters();
+        if (document.getElementById('u_kpi_total')) document.getElementById('u_kpi_total').innerText = total + ' fő';
+        if (document.getElementById('u_kpi_active')) document.getElementById('u_kpi_active').innerText = active + ' fő';
+        if (document.getElementById('u_kpi_disabled')) document.getElementById('u_kpi_disabled').innerText = disabled + ' fő';
+        if (document.getElementById('u_badge_cnt')) document.getElementById('u_badge_cnt').innerText = total;
 
-            // Első szűrés, rendezés és renderelés
-            filterAndSortUsers();
-        }
-    } catch(err) {
-        console.error('Hiba a felhasználók betöltésekor:', err);
+        populateUserDropdownFilters();
+        filterAndSortUsers();
+    } else {
+        var usersError = results[0].status === 'rejected'
+            ? results[0].reason.message
+            : 'HTTP ' + results[0].value.status;
+        console.error('Hiba a felhasználók betöltésekor:', usersError);
     }
+
+    if (results[1].status === 'fulfilled' && results[1].value.ok) {
+        var groupsData = await results[1].value.json();
+        window.allGroupsMaster = groupsData.groups || groupsData.data || [];
+        window.groupListState.loaded = true;
+        window.groupListState.error = '';
+        window.updateGroupCount(window.allGroupsMaster.length);
+        window.renderGroupsList();
+    } else {
+        var groupsError = results[1].status === 'rejected'
+            ? results[1].reason.message
+            : 'HTTP ' + results[1].value.status;
+        window.groupListState.error = 'A csoportok betöltése sikertelen (' + groupsError + ').';
+        console.error(window.groupListState.error);
+        window.renderGroupsList();
+    }
+    window.groupListState.loading = false;
+};
+
+window.groupListState = {
+    loaded: false,
+    loading: false,
+    error: '',
+    search: '',
+    sortField: 'sam_account_name',
+    sortOrder: 'asc'
+};
+window.allGroupsMaster = window.allGroupsMaster || [];
+
+window.dataTableLayoutDefaults = {
+    users: [230, 160, 230, 180, 170, 170, 100],
+    groups: [240, 160, 170, 110, 420, 120]
+};
+window.dataTableLayouts = JSON.parse(JSON.stringify(window.dataTableLayoutDefaults));
+window.dataTableLayoutInitPromise = null;
+window.dataTableLayoutSaveTimers = {};
+
+window.initializeDataTableLayouts = function() {
+    if (window.dataTableLayoutInitPromise) return window.dataTableLayoutInitPromise;
+    window.dataTableLayoutInitPromise = (async function() {
+        try {
+            var response = await fetch('/api/users/table-layout');
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            var data = await response.json();
+            Object.keys(window.dataTableLayoutDefaults).forEach(function(tableName) {
+                var widths = data.layouts && data.layouts[tableName];
+                if (Array.isArray(widths) && widths.length === window.dataTableLayoutDefaults[tableName].length &&
+                    widths.every(function(width) { return Number.isInteger(width) && width >= 60 && width <= 1200; })) {
+                    window.dataTableLayouts[tableName] = widths.slice();
+                }
+            });
+        } catch (error) {
+            console.error('A táblázat-oszlopszélességek betöltése nem sikerült:', error);
+            window.setDataTableLayoutStatus('A mentett oszlopszélességek betöltése nem sikerült.');
+        }
+        Object.keys(window.dataTableLayoutDefaults).forEach(function(tableName) {
+            window.applyDataTableLayout(tableName);
+            window.setupDataTableResizers(tableName);
+            window.setupDataTableScrollbars(tableName);
+        });
+    })();
+    return window.dataTableLayoutInitPromise;
+};
+
+window.setDataTableLayoutStatus = function(message) {
+    document.querySelectorAll('[data-table-layout-status]').forEach(function(element) {
+        element.textContent = message;
+    });
+};
+
+window.applyDataTableLayout = function(tableName) {
+    var table = document.getElementById(tableName === 'users' ? 'usersDataTable' : 'groupsDataTable');
+    if (!table) return;
+    var cols = table.querySelectorAll('colgroup col');
+    var widths = window.dataTableLayouts[tableName];
+    widths.forEach(function(width, index) {
+        if (cols[index]) cols[index].style.width = width + 'px';
+    });
+    table.style.width = widths.reduce(function(total, width) { return total + width; }, 0) + 'px';
+    window.updateDataTableScrollbars(tableName);
+};
+
+window.setupDataTableScrollbars = function(tableName) {
+    var scrollbars = document.querySelectorAll('[data-table-scroll="' + tableName + '"]');
+    var viewport = document.querySelector('.data-table-scroll[data-table-scroll="' + tableName + '"]');
+    if (!viewport) return;
+    scrollbars.forEach(function(scrollbar) {
+        if (scrollbar.dataset.syncBound === 'true') return;
+        scrollbar.dataset.syncBound = 'true';
+        scrollbar.addEventListener('scroll', function() {
+            scrollbars.forEach(function(other) {
+                if (other !== scrollbar) other.scrollLeft = scrollbar.scrollLeft;
+            });
+        });
+    });
+    if (!window.dataTableScrollResizeObserver && window.ResizeObserver) {
+        window.dataTableScrollResizeObserver = new ResizeObserver(function() {
+            Object.keys(window.dataTableLayoutDefaults).forEach(window.updateDataTableScrollbars);
+        });
+    }
+    if (window.dataTableScrollResizeObserver) window.dataTableScrollResizeObserver.observe(viewport);
+    window.updateDataTableScrollbars(tableName);
+};
+
+window.updateDataTableScrollbars = function(tableName) {
+    var table = document.getElementById(tableName === 'users' ? 'usersDataTable' : 'groupsDataTable');
+    var viewport = document.querySelector('.data-table-scroll[data-table-scroll="' + tableName + '"]');
+    if (!table || !viewport) return;
+    document.querySelectorAll('.table-scroll-mirror[data-table-scroll="' + tableName + '"] > div').forEach(function(inner) {
+        inner.style.width = Math.max(table.scrollWidth, viewport.clientWidth) + 'px';
+    });
+};
+
+window.setupDataTableResizers = function(tableName) {
+    var table = document.getElementById(tableName === 'users' ? 'usersDataTable' : 'groupsDataTable');
+    if (!table) return;
+    var headers = table.querySelectorAll('thead th');
+    headers.forEach(function(header, index) {
+        if (header.querySelector('.table-column-resizer')) return;
+        var handle = document.createElement('span');
+        handle.className = 'table-column-resizer';
+        handle.setAttribute('role', 'separator');
+        handle.setAttribute('aria-orientation', 'vertical');
+        handle.setAttribute('aria-label', 'Oszlopszélesség módosítása');
+        header.appendChild(handle);
+        handle.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+        handle.addEventListener('pointerdown', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            var startX = event.clientX;
+            var startWidth = window.dataTableLayouts[tableName][index];
+            handle.classList.add('is-resizing');
+            function move(moveEvent) {
+                var nextWidth = Math.max(60, Math.min(1200, Math.round(startWidth + moveEvent.clientX - startX)));
+                window.dataTableLayouts[tableName][index] = nextWidth;
+                window.applyDataTableLayout(tableName);
+            }
+            function finish() {
+                handle.classList.remove('is-resizing');
+                document.removeEventListener('pointermove', move);
+                document.removeEventListener('pointerup', finish);
+                window.persistDataTableLayout(tableName);
+            }
+            document.addEventListener('pointermove', move);
+            document.addEventListener('pointerup', finish, { once: true });
+        });
+    });
+};
+
+window.persistDataTableLayout = function(tableName) {
+    clearTimeout(window.dataTableLayoutSaveTimers[tableName]);
+    window.dataTableLayoutSaveTimers[tableName] = setTimeout(async function() {
+        try {
+            var response = await fetch('/api/users/table-layout', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ layouts: { [tableName]: window.dataTableLayouts[tableName] } })
+            });
+            var data = await response.json();
+            if (!response.ok || data.status !== 'SUCCESS') {
+                throw new Error(data.detail || data.message || ('HTTP ' + response.status));
+            }
+            window.setDataTableLayoutStatus('Oszlopszélességek helyben elmentve.');
+        } catch (error) {
+            console.error('Az oszlopszélességek mentése nem sikerült:', error);
+            window.setDataTableLayoutStatus('Az oszlopszélességek mentése nem sikerült: ' + error.message);
+        }
+    }, 250);
+};
+
+window.resetDataTableWidths = function(tableName) {
+    var defaults = window.dataTableLayoutDefaults[tableName];
+    if (!defaults) return;
+    window.dataTableLayouts[tableName] = defaults.slice();
+    window.applyDataTableLayout(tableName);
+    window.persistDataTableLayout(tableName);
+};
+
+window.refreshDataTableLayoutForVisibleTab = function() {
+    var tableName = document.getElementById('viewGroupsContainer')?.style.display === 'none'
+        ? 'users'
+        : 'groups';
+    if (!window.dataTableLayoutInitPromise) {
+        window.initializeDataTableLayouts().then(function() {
+            window.refreshDataTableLayoutForVisibleTab();
+        });
+        return;
+    }
+    window.applyDataTableLayout(tableName);
+    window.setupDataTableScrollbars(tableName);
+    window.requestAnimationFrame(function() {
+        window.updateDataTableScrollbars(tableName);
+    });
+};
+
+window.updateGroupCount = function(count) {
+    ['u_kpi_groups', 'g_badge_cnt'].forEach(function(id) {
+        var element = document.getElementById(id);
+        if (element) element.innerText = id === 'u_kpi_groups' ? count + ' db' : count;
+    });
+};
+
+window.switchUsersSubTab = function(tab) {
+    var showGroups = tab === 'groups';
+    var usersView = document.getElementById('viewUsersContainer');
+    var groupsView = document.getElementById('viewGroupsContainer');
+    var usersButton = document.getElementById('btnSubUsers');
+    var groupsButton = document.getElementById('btnSubGroups');
+
+    if (usersView) usersView.style.display = showGroups ? 'none' : 'block';
+    if (groupsView) groupsView.style.display = showGroups ? 'block' : 'none';
+    if (usersButton) {
+        usersButton.style.background = showGroups ? '#f1f5f9' : '#0284c7';
+        usersButton.style.color = showGroups ? '#334155' : 'white';
+    }
+    if (groupsButton) {
+        groupsButton.style.background = showGroups ? '#6366f1' : '#f1f5f9';
+        groupsButton.style.color = showGroups ? 'white' : '#334155';
+    }
+    window.refreshDataTableLayoutForVisibleTab();
+
+    if (showGroups && !window.groupListState.loaded && !window.groupListState.loading) {
+        window.loadUsersAndGroups();
+    } else if (showGroups) {
+        window.renderGroupsList();
+    }
+};
+
+window.filterAndSortGroups = function() {
+    window.groupListState.search = (document.getElementById('groupGlobalSearch')?.value || '')
+        .trim()
+        .toLocaleLowerCase('hu');
+    window.renderGroupsList();
+};
+
+window.sortGroupsBy = function(field) {
+    var state = window.groupListState;
+    if (state.sortField === field) {
+        state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sortField = field;
+        state.sortOrder = 'asc';
+    }
+    window.renderGroupsList();
+};
+
+window.renderGroupsList = function() {
+    var tbody = document.getElementById('groupsTableBody');
+    if (!tbody) return;
+    var state = window.groupListState;
+    if (state.error) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#b91c1c;">' + escapeHtml(state.error) + '</td></tr>';
+        return;
+    }
+
+    var query = state.search;
+    var groups = (window.allGroupsMaster || []).filter(function(group) {
+        return !query || (group.sam_account_name || '').toLocaleLowerCase('hu').includes(query)
+            || (group.description || '').toLocaleLowerCase('hu').includes(query);
+    }).slice();
+    groups.sort(function(a, b) {
+        var left = a[state.sortField] || '';
+        var right = b[state.sortField] || '';
+        if (state.sortField === 'members_count') {
+            left = Number(a.members_count || 0);
+            right = Number(b.members_count || 0);
+            return state.sortOrder === 'asc' ? left - right : right - left;
+        }
+        if (state.sortField === 'when_created') {
+            left = left ? new Date(left).getTime() : 0;
+            right = right ? new Date(right).getTime() : 0;
+            return state.sortOrder === 'asc' ? left - right : right - left;
+        }
+        var comparison = String(left).localeCompare(String(right), 'hu', { sensitivity: 'base' });
+        return state.sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    if (!groups.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748b;">' +
+            (query ? 'Nincs a keresésnek megfelelő csoport.' : 'Nincs megjeleníthető csoport.') + '</td></tr>';
+    } else {
+        tbody.innerHTML = groups.map(function(group) {
+            var created = group.when_created ? new Date(group.when_created) : null;
+            var createdText = created && !Number.isNaN(created.getTime())
+                ? created.toLocaleDateString('hu-HU')
+                : '-';
+            var sam = group.sam_account_name || '-';
+            return '<tr style="border-bottom:1px solid #f1f5f9;">' +
+                '<td style="padding:10px 14px; font-weight:700; color:#0f172a;">' + escapeHtml(sam) + '</td>' +
+                '<td style="padding:10px 14px; white-space:nowrap; color:#475569;">' + escapeHtml(createdText) + '</td>' +
+                '<td style="padding:10px 14px; color:#475569;">' + escapeHtml(group.group_type || 'AD-csoport') + '</td>' +
+                '<td style="padding:10px 14px; white-space:nowrap; color:#475569; font-variant-numeric:tabular-nums;">' + Number(group.members_count || 0) + '</td>' +
+                '<td style="padding:10px 14px; color:#475569;">' + escapeHtml(group.description || '-') + '</td>' +
+                '<td style="padding:8px 14px; text-align:right;"><button type="button" class="btn" style="background:#6366f1; color:white; padding:5px 11px;" data-group-details="' + escapeHtml(sam) + '">Részletek</button></td>' +
+                '</tr>';
+        }).join('');
+        tbody.querySelectorAll('[data-group-details]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                window.openGroupMembersModal(button.dataset.groupDetails);
+            });
+        });
+    }
+
+    var countText = query
+        ? groups.length + ' találat / ' + (window.allGroupsMaster || []).length + ' csoport'
+        : groups.length + ' csoport';
+    ['groupPaginationTop', 'groupPaginationBottom'].forEach(function(id) {
+        var element = document.getElementById(id);
+        if (element) element.innerText = countText;
+    });
+    ['sam_account_name', 'when_created', 'group_type', 'members_count', 'description'].forEach(function(field) {
+        var indicator = document.getElementById('g_sort_' + field);
+        if (indicator) indicator.innerText = state.sortField === field
+            ? (state.sortOrder === 'asc' ? '▲' : '▼')
+            : '⇅';
+    });
 };
 
 function populateUserDropdownFilters() {
@@ -1580,38 +1904,88 @@ window.openUserModal = async function(samName) {
     modal.style.display = 'flex';
     modal.innerHTML = '<div style="background:white; padding:24px; border-radius:8px; font-weight:700; color:#0284c7;">⏳ Adatlap betöltése...</div>';
 
-    var isAct = u ? (u.is_enabled !== false && u.enabled !== false) : true;
-    var dName = u ? (u.display_name || u.displayName || samName) : samName;
-    var sMail = u ? (u.mail || u.email || '-') : '-';
-    var sDept = u ? (u.department || '-') : '-';
-    var sTitle = u ? (u.title || '-') : '-';
-    var sPhone = u ? (u.telephone_number || '-') : '-';
-    var sLogon = u ? (u.last_logon || u.last_logon_date || '-') : '-';
-
-    // Csoporttagságok lekérése a backendről
+    var detailData = null;
     var groupsHtml = '<span style="color:#64748b;">⏳ Csoporttagságok betöltése...</span>';
     try {
         var gRes = await fetch('/api/users/' + encodeURIComponent(samName) + '/detail');
-        if (gRes.ok) {
-            var gData = await gRes.json();
-            var grps = gData.groups || gData.memberOf || [];
-            if (grps.length > 0) {
-                groupsHtml = grps.map(function(g) {
-                    var gn = typeof g === 'object' ? (g.name || g.sam_account_name) : g;
-                    return '<span style="background:#e0f2fe; color:#0369a1; padding:4px 9px; border-radius:5px; font-size:12px; font-weight:600; margin:3px; display:inline-block;">🏢 ' + escapeHtml(gn) + '</span>';
-                }).join('');
-            } else {
-                groupsHtml = '<span style="background:#e0f2fe; color:#0369a1; padding:4px 9px; border-radius:5px; font-size:12px; font-weight:600; margin:3px; display:inline-block;">🏢 Domain Users</span>';
-            }
+        if (!gRes.ok) {
+            throw new Error('HTTP ' + gRes.status);
+        }
+        detailData = await gRes.json();
+        var grps = Array.isArray(detailData.groups) ? detailData.groups : [];
+        if (grps.length > 0) {
+            groupsHtml = grps.map(function(g) {
+                var gn = typeof g === 'object' ? (g.name || g.sam_account_name || '-') : g;
+                var isDistributionList = typeof g === 'object' && g.membership_type === 'distribution_list';
+                var typeLabel = isDistributionList
+                    ? 'Terjesztési lista'
+                    : (typeof g === 'object' && g.membership_type === 'security_group' ? 'Biztonsági csoport' : 'AD-csoport');
+                var colors = isDistributionList
+                    ? 'background:#f3e8ff; color:#7e22ce;'
+                    : 'background:#e0f2fe; color:#0369a1;';
+                return '<button type="button" data-group-name="' + escapeHtml(gn) + '" title="Kattintson a csoport tagjainak megtekintéséhez" style="' + colors + ' padding:4px 9px; border:0; border-radius:5px; font-size:12px; font-weight:600; margin:3px; display:inline-block; cursor:pointer;">' + (isDistributionList ? '📧 ' : '🏢 ') + escapeHtml(gn) + ' <small>(' + typeLabel + ')</small></button>';
+            }).join('');
         } else {
-            groupsHtml = '<span style="background:#e0f2fe; color:#0369a1; padding:4px 9px; border-radius:5px; font-size:12px; font-weight:600; margin:3px; display:inline-block;">🏢 Domain Users</span>';
+            groupsHtml = '<span style="color:#64748b;">Nincs szinkronizált csoporttagság.</span>';
         }
     } catch(e) {
-        groupsHtml = '<span style="background:#e0f2fe; color:#0369a1; padding:4px 9px; border-radius:5px; font-size:12px; font-weight:600; margin:3px; display:inline-block;">🏢 Domain Users</span>';
+        groupsHtml = '<span style="color:#b91c1c;">A csoporttagságok betöltése sikertelen (' + escapeHtml(e.message) + '). Frissítse az adatokat, vagy ellenőrizze a szinkronizálást.</span>';
     }
 
+    var userData = detailData && detailData.user ? detailData.user : (u || {});
+    var isAct = userData.is_enabled !== false;
+    var dName = userData.display_name || u?.display_name || u?.displayName || samName;
+    var knownLabels = {
+        object_guid: 'AD objektum GUID',
+        sam_account_name: 'Felhasználónév (SAM)',
+        display_name: 'Megjelenítendő név',
+        mail: 'E-mail cím',
+        is_enabled: 'Fiók engedélyezve',
+        distinguished_name: 'Distinguished Name',
+        first_name: 'Keresztnév',
+        last_name: 'Vezetéknév',
+        description: 'Leírás',
+        office: 'Iroda',
+        title: 'Beosztás',
+        department: 'Részleg / osztály',
+        company: 'Cég',
+        telephone_number: 'Telefonszám',
+        mobile: 'Mobiltelefon',
+        object_sid: 'SID',
+        last_logon_date: 'Utolsó bejelentkezés',
+        user_status: 'Felhasználói státusz',
+        ou_path: 'Szervezeti egység útvonala',
+        source_type: 'Adatforrás típusa',
+        source_ref: 'Adatforrás hivatkozása',
+        user_principal_name: 'Bejelentkezési név (UPN)',
+        user_account_control: 'AD fiókvezérlő érték',
+        pwd_last_set: 'Jelszó utolsó beállítása',
+        last_logon_timestamp: 'AD utolsó bejelentkezési időbélyeg',
+        first_seen_at: 'Első észlelés',
+        last_seen_at: 'Utolsó észlelés',
+        when_created: 'AD létrehozás dátuma',
+        when_changed: 'AD módosítás dátuma',
+        last_synced_at: 'Utolsó adatbázis-szinkron'
+    };
+    var userAttributes = Object.entries(userData).filter(function(entry) {
+        return entry[1] !== null && entry[1] !== undefined && entry[1] !== '';
+    });
+    var sid = userData.object_sid;
+    var userAttributesHtml = userAttributes.map(function(entry) {
+        var key = entry[0];
+        var value = entry[1];
+        if (key === 'object_sid') return '';
+        if (typeof value === 'boolean' && key === 'is_enabled') value = value ? 'Igen' : 'Nem';
+        if (typeof value === 'string' && /(_at|_date|_set)$/.test(key)) {
+            var parsedDate = new Date(value);
+            if (!Number.isNaN(parsedDate.getTime())) value = parsedDate.toLocaleString('hu-HU');
+        }
+        var label = knownLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, function(letter) { return letter.toUpperCase(); });
+        return '<div style="min-width:0; padding:9px 11px; background:white; border:1px solid #e2e8f0; border-radius:6px;"><small style="display:block; color:#64748b; font-size:10.5px;">' + escapeHtml(label) + '</small><b style="display:block; margin-top:3px; color:#0f172a; font-size:12px; overflow-wrap:anywhere;">' + escapeHtml(value) + '</b></div>';
+    }).join('');
+
     modal.innerHTML = `
-    <div style="background:white; border-radius:12px; width:100%; max-width:620px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); overflow:hidden; animation:fadeIn 0.15s ease-out;">
+    <div style="background:white; border-radius:12px; width:100%; max-width:900px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); overflow:hidden; animation:fadeIn 0.15s ease-out;">
         <div style="background:#0284c7; color:white; padding:16px 22px; display:flex; justify-content:space-between; align-items:center;">
             <div style="font-weight:800; font-size:17px; display:flex; align-items:center; gap:10px;">
                 <span style="font-size:22px;">👤</span> ${escapeHtml(dName)}
@@ -1619,15 +1993,13 @@ window.openUserModal = async function(samName) {
             <button onclick="document.getElementById('adUserFloatingModal').style.display='none'" style="background:transparent; border:none; color:white; font-size:22px; font-weight:bold; cursor:pointer;">✕</button>
         </div>
         <div style="padding:22px; display:flex; flex-direction:column; gap:14px; font-size:13.5px; max-height:75vh; overflow-y:auto;">
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#f8fafc; padding:16px; border-radius:8px; border:1px solid #e2e8f0;">
-                <div><span style="color:#64748b; font-size:11.5px; display:block;">Felhasználónév (SAM):</span><b>${escapeHtml(samName)}</b></div>
-                <div><span style="color:#64748b; font-size:11.5px; display:block;">Fiók állapota:</span><b style="color:${isAct ? '#15803d' : '#b91c1c'};">${isAct ? '✅ Aktív munkatárs' : '⛔ Letiltott fiók'}</b></div>
-                <div><span style="color:#64748b; font-size:11.5px; display:block;">E-mail cím:</span><b>${escapeHtml(sMail)}</b></div>
-                <div><span style="color:#64748b; font-size:11.5px; display:block;">Részleg / Osztály:</span><b>${escapeHtml(sDept)}</b></div>
-                <div><span style="color:#64748b; font-size:11.5px; display:block;">Beosztás (Title):</span><b>${escapeHtml(sTitle)}</b></div>
-                <div><span style="color:#64748b; font-size:11.5px; display:block;">Telefonszám:</span><b>${escapeHtml(sPhone)}</b></div>
-                <div style="grid-column: span 2;"><span style="color:#64748b; font-size:11.5px; display:block;">Utolsó belépés:</span><b>${escapeHtml(sLogon)}</b></div>
-            </div>
+            ${sid ? '<div style="padding:13px 15px; background:#eff6ff; border:2px solid #60a5fa; border-radius:8px;"><span style="display:block; color:#1e40af; font-size:11px; font-weight:700;">🔐 AD SECURITY IDENTIFIER (SID)</span><code style="display:block; margin-top:5px; color:#0f172a; font-size:14px; font-weight:800; overflow-wrap:anywhere;">' + escapeHtml(sid) + '</code></div>' : '<div style="padding:10px 12px; background:#fff7ed; border:1px solid #fdba74; border-radius:7px; color:#9a3412;">Ehhez a felhasználóhoz nincs SID eltárolva az adatbázisban.</div>'}
+            <section>
+                <span style="font-weight:700; color:#0f172a; display:block; margin-bottom:8px;">Az adatbázisban tárolt felhasználói adatok (${userAttributes.length} mező)</span>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:8px; padding:12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0;">
+                    ${userAttributesHtml || '<span style="color:#64748b;">Nincs elérhető adat.</span>'}
+                </div>
+            </section>
             <div>
                 <span style="font-weight:700; color:#0f172a; display:block; margin-bottom:8px;">👥 Active Directory Csoporttagságok:</span>
                 <div style="display:flex; flex-wrap:wrap; gap:4px; max-height:160px; overflow-y:auto; padding:4px; background:#fafafa; border-radius:6px; border:1px solid #f1f5f9;">
@@ -1639,4 +2011,272 @@ window.openUserModal = async function(samName) {
             <button onclick="document.getElementById('adUserFloatingModal').style.display='none'" style="background:#64748b; color:white; border:none; padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Bezárás</button>
         </div>
     </div>`;
+    modal.querySelectorAll('[data-group-name]').forEach(function(button) {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            window.openGroupMembersModal(button.dataset.groupName);
+        });
+    });
+};
+
+window.openGroupMembersModal = function(groupName) {
+    if (!groupName) return;
+
+    var overlay = document.getElementById('adGroupMembersOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'adGroupMembersOverlay';
+        overlay.style.cssText = 'position:fixed; inset:0; z-index:1000000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,0.68); backdrop-filter:blur(2px);';
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+
+    window.groupMembersState = {
+        groupName: groupName,
+        groupPath: [groupName],
+        group: null,
+        members: [],
+        selectedIdentity: null,
+        offset: 0,
+        nextOffset: 0,
+        filteredCount: 0,
+        memberCount: 0,
+        query: '',
+        sortField: 'display_name',
+        sortOrder: 'asc',
+        requestId: 0,
+        error: ''
+    };
+
+    overlay.innerHTML = `
+        <section style="background:white; width:min(1100px,100%); max-height:92vh; display:flex; flex-direction:column; border-radius:12px; box-shadow:0 25px 60px rgba(0,0,0,.35); overflow:hidden;">
+            <header style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:16px 20px; color:white; background:#4338ca;">
+                <div><small style="opacity:.85;">Active Directory csoport / terjesztési lista</small><h2 id="groupMembersTitle" style="margin:3px 0 0; font-size:19px;">${escapeHtml(groupName)}</h2></div>
+                <button type="button" onclick="document.getElementById('adGroupMembersOverlay').style.display='none'" aria-label="Bezárás" style="border:0; background:transparent; color:white; font-size:26px; cursor:pointer;">✕</button>
+            </header>
+            <div id="groupMembersBody" style="padding:16px; overflow:auto;">
+                <div style="padding:26px; text-align:center; color:#64748b;">⏳ A csoport és a tagok adatainak betöltése...</div>
+            </div>
+        </section>`;
+    overlay.onclick = function(event) {
+        if (event.target === overlay) overlay.style.display = 'none';
+    };
+    window.loadGroupMembersPage(true);
+};
+
+window.loadGroupMembersPage = async function(reset) {
+    var state = window.groupMembersState;
+    var body = document.getElementById('groupMembersBody');
+    if (!state || !body) return;
+    if (reset) {
+        state.members = [];
+        state.offset = 0;
+        state.nextOffset = 0;
+        state.selectedIdentity = null;
+        state.error = '';
+    }
+
+    var requestId = ++state.requestId;
+    var params = new URLSearchParams({
+        limit: '100',
+        offset: String(reset ? 0 : state.nextOffset),
+        q: state.query,
+        sort_by: state.sortField,
+        sort_order: state.sortOrder
+    });
+    try {
+        var currentGroup = state.groupPath[state.groupPath.length - 1];
+        var response = await fetch('/api/groups/' + encodeURIComponent(currentGroup) + '/detail?' + params.toString());
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        var data = await response.json();
+        if (requestId !== state.requestId) return;
+        state.group = data.group;
+        state.memberCount = data.member_count || 0;
+        state.filteredCount = data.filtered_count || 0;
+        state.nextOffset = data.next_offset;
+        state.members = reset ? (data.members || []) : state.members.concat(data.members || []);
+        if (!state.selectedIdentity && state.members.length) {
+            state.selectedIdentity = state.members[0].entity_type + ':' + state.members[0].guid;
+        }
+        state.error = '';
+        window.renderGroupMembersModal();
+    } catch (error) {
+        if (requestId !== state.requestId) return;
+        state.error = 'A csoporttagok lekérése nem sikerült: ' + error.message;
+        window.renderGroupMembersModal();
+    }
+};
+
+window.searchGroupMembers = function() {
+    var input = document.getElementById('groupMemberSearch');
+    if (!window.groupMembersState || !input) return;
+    window.groupMembersState.query = input.value.trim();
+    window.loadGroupMembersPage(true);
+};
+
+window.sortGroupMembersBy = function(field) {
+    var state = window.groupMembersState;
+    if (!state) return;
+    if (state.sortField === field) {
+        state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sortField = field;
+        state.sortOrder = 'asc';
+    }
+    window.loadGroupMembersPage(true);
+};
+
+window.openNestedGroupMembers = function(groupName) {
+    var state = window.groupMembersState;
+    if (!state || !groupName) return;
+    state.groupPath.push(groupName);
+    state.groupName = groupName;
+    state.group = null;
+    state.query = '';
+    window.loadGroupMembersPage(true);
+};
+
+window.navigateGroupMembersPath = function(index) {
+    var state = window.groupMembersState;
+    if (!state || index < 0 || index >= state.groupPath.length) return;
+    state.groupPath = state.groupPath.slice(0, index + 1);
+    state.groupName = state.groupPath[index];
+    state.group = null;
+    state.query = '';
+    window.loadGroupMembersPage(true);
+};
+
+window.selectGroupMember = function(entityType, guid) {
+    if (!window.groupMembersState) return;
+    window.groupMembersState.selectedIdentity = entityType + ':' + guid;
+    window.renderGroupMembersModal();
+};
+
+window.renderGroupMembersModal = function() {
+    var state = window.groupMembersState;
+    var body = document.getElementById('groupMembersBody');
+    if (!state || !body) return;
+
+    var group = state.group || {};
+    var selected = state.members.find(function(member) {
+        return member.entity_type + ':' + member.guid === state.selectedIdentity;
+    });
+    var profileFields = selected ? (selected.entity_type === 'group' ? [
+        ['Csoport neve', selected.display_name],
+        ['Csoport típusa', selected.group_type],
+        ['Csoport SAM-azonosítója', selected.sam_account_name],
+        ['SID', selected.object_sid],
+        ['Leírás', selected.description],
+        ['Distinguished Name', selected.distinguished_name],
+        ['Létrehozva', selected.when_created],
+        ['Módosítva', selected.when_changed],
+        ['Csoporttagság kezdete', selected.assigned_at],
+        ['Utolsó szinkron', selected.last_synced_at]
+    ] : [
+        ['Megjelenítendő név', selected.display_name],
+        ['Felhasználónév (SAM)', selected.sam_account_name],
+        ['SID', selected.object_sid],
+        ['Email cím', selected.mail],
+        ['Bejelentkezési név', selected.user_principal_name],
+        ['Fiók állapota', selected.is_enabled ? (selected.user_status || 'Aktív') : 'Letiltva'],
+        ['Beosztás', selected.title],
+        ['Részleg', selected.department],
+        ['Cég', selected.company],
+        ['Iroda', selected.office],
+        ['Telefonszám', selected.telephone_number],
+        ['Mobil', selected.mobile],
+        ['Utolsó bejelentkezés', selected.last_logon_date],
+        ['Létrehozva', selected.when_created],
+        ['Módosítva', selected.when_changed],
+        ['Csoporttagság kezdete', selected.assigned_at],
+        ['AD útvonal', selected.ou_path],
+        ['Leírás', selected.description],
+        ['Distinguished Name', selected.distinguished_name],
+        ['Utolsó szinkron', selected.last_synced_at]
+    ]).filter(function(field) { return field[1] !== null && field[1] !== undefined && String(field[1]).trim() !== ''; }) : [];
+
+    var profileHtml = selected
+        ? '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:9px;">' + profileFields.map(function(field) {
+            var value = field[1];
+            if (['Utolsó bejelentkezés', 'Létrehozva', 'Módosítva', 'Csoporttagság kezdete', 'Utolsó szinkron'].includes(field[0])) {
+                var parsed = new Date(value);
+                if (!Number.isNaN(parsed.getTime())) value = parsed.toLocaleString('hu-HU');
+            }
+            return '<div style="min-width:0; padding:8px 10px; background:white; border:1px solid #e2e8f0; border-radius:6px;"><small style="display:block; color:#64748b; font-size:10.5px;">' + escapeHtml(field[0]) + '</small><b style="display:block; margin-top:3px; color:#0f172a; font-size:12px; overflow-wrap:anywhere;">' + escapeHtml(value) + '</b></div>';
+        }).join('') + '</div>'
+        : '<div style="padding:16px; color:#64748b; background:#f8fafc; border-radius:6px;">' + (state.members.length ? 'Válasszon egy tagot a listából a részletes adatok megjelenítéséhez.' : 'Nincs megjeleníthető tag.') + '</div>';
+
+    var memberRows = state.members.map(function(member) {
+        var identity = member.entity_type + ':' + member.guid;
+        var active = identity === state.selectedIdentity;
+        var assignedAt = member.assigned_at ? new Date(member.assigned_at) : null;
+        var assignedLabel = assignedAt && !Number.isNaN(assignedAt.getTime()) ? assignedAt.toLocaleString('hu-HU') : '-';
+        var entityLabel = member.entity_type === 'group' ? 'Csoport · ' + (member.group_type || 'AD-csoport') : 'Felhasználó';
+        var status = member.entity_type === 'group' ? '—' : (member.is_enabled ? 'Aktív' : 'Letiltva');
+        var statusColor = member.entity_type === 'group' ? '#64748b' : (member.is_enabled ? '#15803d' : '#b91c1c');
+        var handler = member.entity_type === 'group'
+            ? 'data-nested-group="' + escapeHtml(member.sam_account_name) + '"'
+            : 'data-member-guid="' + escapeHtml(member.guid) + '"';
+        return '<button type="button" ' + handler + ' style="width:100%; display:grid; grid-template-columns:minmax(130px,1.05fr) minmax(155px,1.2fr) minmax(120px,.9fr) minmax(150px,1.2fr) minmax(90px,.65fr) minmax(145px,1fr); gap:10px; align-items:center; text-align:left; border:0; border-bottom:1px solid #e2e8f0; padding:10px 12px; cursor:pointer; background:' + (active ? '#eef2ff' : 'white') + '; color:#0f172a;"><span style="color:' + (member.entity_type === 'group' ? '#6d28d9' : '#475569') + '; font-size:11px; font-weight:700;">' + (member.entity_type === 'group' ? '📂 ' : '👤 ') + escapeHtml(entityLabel) + (member.entity_type === 'group' ? ' →' : '') + '</span><b>' + escapeHtml(member.display_name || member.sam_account_name) + '</b><span style="font-family:monospace; color:#475569;">' + escapeHtml(member.sam_account_name || '-') + '</span><span style="color:#0369a1; overflow-wrap:anywhere;">' + escapeHtml(member.mail || '-') + '</span><span style="color:' + statusColor + ';">' + status + '</span><span style="color:#475569;">' + escapeHtml(assignedLabel) + '</span></button>';
+    }).join('');
+
+    var headers = [
+        ['entity_type', 'Entitás típusa'],
+        ['display_name', 'Megjelenítendő név'],
+        ['sam_account_name', 'SAM fiók'],
+        ['mail', 'Email'],
+        ['is_enabled', 'Állapot'],
+        ['assigned_at', 'Tagság kezdete']
+    ];
+    var headerHtml = headers.map(function(header) {
+        var active = state.sortField === header[0];
+        var direction = active ? (state.sortOrder === 'asc' ? '▲' : '▼') : '↕';
+        return '<button type="button" onclick="window.sortGroupMembersBy(\'' + header[0] + '\')" aria-label="Rendezés: ' + escapeHtml(header[1]) + '" aria-sort="' + (active ? (state.sortOrder === 'asc' ? 'ascending' : 'descending') : 'none') + '" style="border:0; padding:0; background:transparent; color:' + (active ? '#3730a1' : '#475569') + '; font-size:11px; font-weight:700; text-align:left; cursor:pointer;">' + escapeHtml(header[1]) + ' <span aria-hidden="true">' + direction + '</span></button>';
+    }).join('');
+
+    var breadcrumbsHtml = state.groupPath.length > 1
+        ? '<nav aria-label="Csoport útvonal" style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; font-size:12px;">' + state.groupPath.map(function(pathGroup, index) {
+            return (index ? '<span style="color:#94a3b8;">›</span>' : '') + '<button type="button" data-group-path-index="' + index + '" style="border:0; padding:2px 4px; background:transparent; color:' + (index === state.groupPath.length - 1 ? '#312e81' : '#4338ca') + '; font-weight:' + (index === state.groupPath.length - 1 ? '700' : '500') + '; cursor:pointer;">' + escapeHtml(pathGroup) + '</button>';
+        }).join('') + '</nav>'
+        : '';
+
+    body.innerHTML = `
+        ${breadcrumbsHtml}
+        <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:start; justify-content:space-between; margin-bottom:14px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+            <div style="min-width:260px; flex:1;"><b style="font-size:13px;">${escapeHtml(group.sam_account_name || state.groupPath[state.groupPath.length - 1] || '')} · ${escapeHtml(group.group_type || 'AD-csoport')}</b><div style="margin-top:5px; color:#475569; font-size:12px;">${escapeHtml(group.description || 'Nincs leírás')}</div><small style="display:block; margin-top:5px; color:#64748b; overflow-wrap:anywhere;">${escapeHtml(group.distinguished_name || '')}</small></div>
+            <div style="font-size:13px; font-weight:700; color:#4338ca;">${state.memberCount} tag</div>
+        </div>
+        ${state.error ? '<div role="alert" style="padding:12px; margin-bottom:12px; color:#b91c1c; background:#fef2f2; border-radius:6px;">' + escapeHtml(state.error) + '</div>' : ''}
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+            <input id="groupMemberSearch" type="search" value="${escapeHtml(state.query)}" placeholder="Keresés név, SAM, email vagy SID alapján..." onkeydown="if(event.key==='Enter') window.searchGroupMembers()" style="flex:1; min-width:150px; margin:0; padding:8px 10px;">
+            <button type="button" onclick="window.searchGroupMembers()" style="border:0; border-radius:5px; padding:7px 13px; background:#4338ca; color:white; cursor:pointer;">Keresés</button>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(130px,1.05fr) minmax(155px,1.2fr) minmax(120px,.9fr) minmax(150px,1.2fr) minmax(90px,.65fr) minmax(145px,1fr); gap:10px; padding:8px 12px; color:#475569; background:#f1f5f9; font-size:11px; font-weight:700;">${headerHtml}</div>
+        <div style="max-height:34vh; overflow:auto; border:1px solid #e2e8f0; border-top:0; border-radius:0 0 7px 7px; margin-bottom:14px;">
+            ${memberRows || '<div style="padding:18px; text-align:center; color:#64748b;">Nincs a keresésnek megfelelő csoporttag.</div>'}
+        </div>
+        <section style="padding:12px; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:8px;">
+            <div style="margin-bottom:9px; font-weight:700; color:#0f172a;">👤 Kijelölt tag részletes AD-adatai</div>
+            ${profileHtml}
+        </section>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding-top:10px; color:#64748b; font-size:12px;">
+            <span>Találat: ${state.filteredCount} / ${state.memberCount}</span>
+            ${state.nextOffset !== null && state.nextOffset !== undefined ? '<button type="button" onclick="window.loadGroupMembersPage(false)" style="border:1px solid #cbd5e1; border-radius:5px; padding:6px 12px; background:white; cursor:pointer;">További tagok betöltése</button>' : ''}
+        </div>`;
+    body.querySelectorAll('[data-member-guid]').forEach(function(button) {
+        button.addEventListener('click', function() {
+            window.selectGroupMember('user', button.dataset.memberGuid);
+        });
+    });
+    body.querySelectorAll('[data-nested-group]').forEach(function(button) {
+        button.addEventListener('click', function() {
+            window.openNestedGroupMembers(button.dataset.nestedGroup);
+        });
+    });
+    body.querySelectorAll('[data-group-path-index]').forEach(function(button) {
+        button.addEventListener('click', function() {
+            window.navigateGroupMembersPath(Number(button.dataset.groupPathIndex));
+        });
+    });
 };

@@ -1,0 +1,36 @@
+{
+  "easyproject": {
+    "url": "https://easyproject.example.invalid/",
+    "api_key": "",
+    "project_id": "",
+    "sync_enabled": false,
+    "sync_interval_minutes": 15
+  },
+  "ad": {
+    "server": "ad.example.invalid:389",
+    "base_dn": "DC=example,DC=invalid",
+    "bind_user": "",
+    "bind_password": "",
+    "sync_enabled": false,
+    "sync_interval_minutes": 15
+  },
+  "telegram": {
+    "bot_token": "",
+    "chat_id": "",
+    "notify_helpdesk": true,
+    "notify_audit": true
+  },
+  "sharepoint": {
+    "tenant_id": "",
+    "client_id": "",
+    "client_secret": "",
+    "site_url": "",
+    "sync_enabled": false,
+    "sync_interval_minutes": 60
+  },
+  "github": {
+    "repo_url": "https://github.com/OWNER/REPOSITORY.git",
+    "token": "",
+    "branch": "release/branch"
+  }
+}

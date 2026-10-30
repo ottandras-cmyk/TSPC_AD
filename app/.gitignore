@@ -4,6 +4,7 @@
 !.env.example
 *.env
 settings.json
+settings.local.json
 */settings.json
 *config/settings.json
 app/config/settings.json
